@@ -77,7 +77,6 @@ class Collector:
                         if len(added_updated) != 0:
                             # Updating os_last_update.txt file for preprocessing update
                             with open(self.OS_FOLDER / self.UPDATED_TRANSLATIONS,"a") as f:
-                                f.write((datetime.now()).strftime(self.TIME_FORMAT) + "\n")
                                 f.writelines(added_updated)
                         
             # Terminating or updating API page
@@ -257,7 +256,7 @@ class Collector:
 
         # Checking if the zip file has been updated
         new_zip_file = self.update_zip_file(download_directory, archive_name, tar_url_date, 
-                                    'last_zip_downloads.txt')
+                                    self.ZIP_VERSIONS)
         if not new_zip_file : return 1
 
         # Define the path to the archive
@@ -275,9 +274,9 @@ class Collector:
                 f.write(response.content)
             print(f"{archive_path} downloaded.")
 
-            ##### Save the last update date
-            with open(download_directory / self.ZIP_VERSIONS, 'a', encoding='utf-8') as f:
-                f.write(f"{archive_name};{tar_url_date.strftime(self.TIME_FORMAT)}")
+        ### Save the last update date
+        with open(download_directory / self.ZIP_VERSIONS, 'w', encoding='utf-8') as f:
+            f.write(f"{archive_name};{tar_url_date.strftime(self.TIME_FORMAT)}")
         
         ### Extract all files to the output directory
         total_added_updated = []
@@ -288,9 +287,9 @@ class Collector:
                     print("Exploring ", translation.name)
                 elif translation.isfile() :
                     # Building file path
-                    raw_path = Path(translation.name).with_suffix('.csv')
+                    raw_path = Path(translation.name).with_suffix('')
                     raw_path_list = str(raw_path).split('\\')
-                    tmp_path = download_directory / Path(f'{raw_path_list[1]}/{raw_path_list[2]}-{raw_path_list[3]}')
+                    tmp_path = download_directory / Path(f'{raw_path_list[1]}/{raw_path_list[2]}-{raw_path_list[3]}-{raw_path_list[1]}.csv')
 
                     # Opening the file
                     f = tar_ref.extractfile(translation)
@@ -301,7 +300,6 @@ class Collector:
                     if updated :
                         # Updating os_last_update.txt file for preprocessing update
                         with open(self.UBUNTU_FOLDER/self.UPDATED_TRANSLATIONS,"a") as f:
-                            f.write((datetime.now()).strftime(self.TIME_FORMAT) + "\n")
                             f.write(str(tmp_path) + '\n')
         
 
@@ -333,18 +331,16 @@ class Collector:
         for i, line in enumerate(po_content) :
             if "PO-Revision-Date:" in line :
                 try :
-                    line = line.replace(' ', '')
-                    tmp_date = line.split(":")[1].split('\n"')[0]
+                    tmp_date = line.split(": ")[1][:-3]#.split('\n"')[0]
                     tmp_date = datetime.strptime(tmp_date, "%Y-%m-%d %H:%M%z")
+
                     if os.path.exists(csv_path) :
                         df = pd.read_csv(csv_path)
                         last_update = datetime.strptime(df['last-update'][0], self.TIME_FORMAT)
                         if last_update >= tmp_date : 
                             print(f'{csv_path} already up-to-date.')
                             return False
-                        else :
-                            new_date = datetime.strftime(tmp_date, self.TIME_FORMAT)
-                    else : new_date = datetime.strftime(tmp_date, self.TIME_FORMAT)
+                    new_date = datetime.strftime(tmp_date, self.TIME_FORMAT)
                 except :
                     continue
             if "msgid" in line :
@@ -388,4 +384,5 @@ class Collector:
                             print("Translation needs an update.")
                             updates.pop(i)
                             return True
+                return True
         else : return True
