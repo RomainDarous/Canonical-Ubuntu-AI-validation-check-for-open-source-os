@@ -6,6 +6,13 @@ import pandas as pd
 import os
 from datetime import datetime
 from nordvpn_switcher import initialize_VPN, rotate_VPN, terminate_VPN
+from bs4 import BeautifulSoup
+import tarfile
+
+# Constants
+TIME_FORMAT = '%Y-%m-%d %H:%M:%S.%f'
+OS_FOLDER = './os_by_language'
+UBUNTU_FOLDER = './ubuntu_by_language'
 
 #---------------------------------- WEBLATE TRANSLATIONS ------------------------------------#
 
@@ -26,7 +33,7 @@ def get_all_translations(api_url: str, api_key: str, wanted_projects:list) -> in
     headers = {
         "Content-Type": "application/json"
     }
-    if api_key != None : headers["Authorization"] = f"Token {api_key}"
+    if api_key != "" : headers["Authorization"] = f"Token {api_key}"
 
     # Connecting to VPN and to the API
     initialize_VPN(save = 1, area_input=['random countries europe 10'])
@@ -38,7 +45,7 @@ def get_all_translations(api_url: str, api_key: str, wanted_projects:list) -> in
         projects = projects_dict['results']
         # Downloading all translations
         for project in projects :
-            if wanted_projects == "ALL" or is_in_wanted_projects(project, wanted_projects) : 
+            if wanted_projects[0] == "ALL" or is_in_wanted_projects(project, wanted_projects) : 
                 languages = get_dict(project["languages_url"], headers = headers)
 
                 for language in languages :
@@ -52,7 +59,7 @@ def get_all_translations(api_url: str, api_key: str, wanted_projects:list) -> in
                     response = requests.get(download_url)
 
                     # Save the file locally
-                    download_directory = Path(f'./os_by_language/{code}')
+                    download_directory = Path(f'{OS_FOLDER}/{code}')
                     update_file(response, download_directory, last_change)
 
         # Terminating or updating API page
@@ -139,7 +146,7 @@ def update_file(response: requests.Response, download_directory: Path, last_chan
             # Checking if an update is required
             if os.path.exists(path) :
                 df = pd.read_csv(path, encoding='utf-8')
-                prev_dt = datetime.strptime(df["last-update"][0], '%Y-%m-%d %H:%M:%S.%f')
+                prev_dt = datetime.strptime(df["last-update"][0], TIME_FORMAT)
                 if prev_dt >= last_dt : print(f"{files} already up-to-date")
                 else : update = True
 
@@ -162,7 +169,7 @@ def update_file(response: requests.Response, download_directory: Path, last_chan
                         continue
 
                     # Droping useless columns and saving the file
-                    df["last-update"] = last_dt.strftime('%Y-%m-%d %H:%M:%S.%f')
+                    df["last-update"] = last_dt.strftime(TIME_FORMAT)
                     df.to_csv(path, encoding='utf-8', index=False)
                     
                     if update : print(f"Updated : {path}")
@@ -197,36 +204,128 @@ def get_ubuntu_translation(url: str) -> int :
         url (str): the url of the download page
 
     Returns:
-        int: 0 to confirm the function ended normally
-    """    
+        int: 0 to confirm the function ended normally, 1 if the translation has not been updated
+    """
+
+    # HTTP request to Launchpad
+    response = requests.get(url)
+    if response.status_code != 200 :
+        print(f"Failed to access Launchpad. Status code: {response.status_code}")
+        return 1
+    
+    # Getting the download link
+    soup = BeautifulSoup(response.text, 'html.parser')
+    tar_url_component = soup.find_all('a', {'class': 'sprite download'})[0]
+    tar_url = tar_url_component.get('href')
+
+    # Getting last update date
+    tar_url_text = tar_url_component.text.replace(" ", "").replace('\n', '').replace("UTC", "")
+    tar_url_date = datetime.strptime(tar_url_text, '%Y-%m-%d%H:%M:%S')
+    
+
+    # Define the download directory
+    download_directory = Path(UBUNTU_FOLDER)
+    download_directory.mkdir(parents=True, exist_ok=True)
+
+
+    
+    ### Get the name of the archive
+    archive_name = tar_url.split('/')[-1]
+    print(f"Archive name: {archive_name}")
+
+    # Checking if the translation needs an update
+    if (download_directory / 'last_update.txt').exists() :
+        with open(download_directory / 'last_update.txt', 'r', encoding='utf-8') as f:
+            updates = f.readlines()
+            for (i,line) in enumerate(updates) :
+                if archive_name in line :
+                    last_update = line.split(';')[1]
+                    last_update = datetime.strptime(last_update, TIME_FORMAT)
+
+                    if last_update >= tar_url_date :
+                        print("Translation already up-to-date.")
+                        return 1
+                    else :
+                        print("Translation needs an update.")
+                        updates.pop(i)
+                        break
+                    
+
+    ### Define the path to the archive
+    archive_path = download_directory / archive_name
+
+    ### Downloading archive if required
+    if archive_path.exists():
+        print(f"{archive_name} already exists.")
+    else:
+        # Checking on the archive
+        response = requests.get(tar_url)
+        if response.status_code != 200 :
+            print(f"Failed to download the file. Status code: {response.status_code}")
+            return 2
+        with open(archive_path, 'wb') as f:
+            f.write(response.content)
+        print(f"{archive_path} downloaded.")
+    
+    ### Extract all files to the output directory
+    with tarfile.open(archive_path, 'r:gz') as tar_ref:
+        translations = tar_ref.getmembers()
+        for translation in translations :
+            if translation.isdir() :
+                print("Exploring ", translation.name)
+            elif translation.isfile() :
+                tmp_path = Path(download_directory / translation.name).with_suffix('.csv')
+                tmp_path.parent.mkdir(parents=True, exist_ok=True)
+
+                f = tar_ref.extractfile(translation)
+                if f is not None :
+                    content = f.read()
+                    po_to_csv(content.decode('utf-8').split('\n'), tmp_path)
+    
+    ### Save the last update date
+    with open(download_directory / 'last_update.txt', 'a', encoding='utf-8') as f:
+        f.write(f"{archive_name};{tar_url_date.strftime(TIME_FORMAT)}")
+    
+    """### Delete the archive
+    os.remove(archive_path)"""
+
+    # Reorganizing the dataset
+    # TO DO : SAVING OF THE NEW DATE, MOVING CSV files and RENAMING THEM, DELETING ARCHIVE
+    # TO DO : AND DELETE SUBFOLDERS AS WELL
+    
     return 0
 
 
-def po_to_csv(po_path: str, csv_path: str) -> int :
+def po_to_csv(po_content: list, csv_path: Path) -> int :
     """Converts a po file to a csv file
 
     Args:
-        po_path (str): path of a .po file
-        csv_path (str): path of the .csv file
+        po_content (list): .po file, a list of strings
+        csv_path (Path): destination folder for the .csv files
 
     Returns:
-        int: 0 to confirm the function ended normally
+        int: 0 to confirm the function ended normally, 1 if the dataframe is empty
     """    
-    po_files = os.listdir(po_path)
 
-    for file in po_files :
-        lge = file.split('.')[0]
-        tmp_translation = []
-        with open(po_path+file, 'r', encoding='utf-8') as content :
-            lines = content.readlines()
-            for i, line in enumerate(lines) :
-                if "msgid" in line :
-                    id = line.split('"')[1]
-                    str = lines[i+1].split('"')[1]
-                    if len(id) != 0 and len(str) != 0:
-                        tmp_translation.append([id.lower(), str.lower()])
+    tmp_translation = []
+    for i, line in enumerate(po_content) :
+        if "msgid" in line :
+            try :
+                line = line.replace(' ', '')
+                id = line.split('"')[1]
+                str = po_content[i+1].split('"')[1]
+                if len(id) != 0 and len(str) != 0:
+                    tmp_translation.append([id.lower(), str.lower()])
+                    
+            except IndexError :
+                continue
+            
 
-        dataframe = pd.DataFrame(tmp_translation, columns=['en', lge])
-        dataframe.to_csv(csv_path+lge+'.csv', encoding='utf-8')
+    
+    dataframe = pd.DataFrame(tmp_translation, columns=['source', 'target'])
+    if dataframe.empty :
+        print("Empty dataframe")
+        return 1
+    else : dataframe.to_csv(csv_path, encoding='utf-8', index=False)
     return 0
 
