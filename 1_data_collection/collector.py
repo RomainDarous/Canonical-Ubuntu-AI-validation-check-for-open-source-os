@@ -8,6 +8,7 @@ from datetime import datetime
 from nordvpn_switcher import initialize_VPN, rotate_VPN, terminate_VPN
 from bs4 import BeautifulSoup
 import tarfile
+import json
 
 class Collector:
     """_summary_
@@ -17,14 +18,31 @@ class Collector:
     """
 
     # Constants
+    OS_FOLDER = Path('./os_by_language/dataset')
+    UBUNTU_FOLDER = OS_FOLDER
+
+    # Metadata of the dataset
     TIME_FORMAT = '%Y-%m-%d %H:%M:%S.%f'
-    OS_FOLDER = Path('./os_by_language')
-    UBUNTU_FOLDER = Path('./ubuntu_by_language')
-    ZIP_VERSIONS = 'last_zip_versions.txt'
-    UPDATED_TRANSLATIONS = 'os_last_updates.txt'
+    METADATA_FILE = Path('./os_by_language/dataset_metadata.json')
+    UPDATED_FILES = "updated_files"
+    ARCH_VERSIONS = "archive_versions"
 
     def __init__(self) -> None:
-        pass
+        self.metadata = {}
+
+        # Assuming the metadata file already has the good format
+        try :
+            with open(self.METADATA_FILE, 'r', encoding='utf-8') as f :
+                self.metadata = json.load(f)
+        except :
+            print("Error loading the metadata file : empty dict instead")
+            self.metadata = {}
+        
+        if not self.metadata:
+            self.metadata = {
+                self.UPDATED_FILES : [],
+                self.ARCH_VERSIONS : {}
+            }
 
     #---------------------------------- WEBLATE TRANSLATIONS ------------------------------------#
 
@@ -51,9 +69,8 @@ class Collector:
         initialize_VPN(save = 1, area_input=['random countries europe 10'])
         url = f"{api_url}projects/"
         projects_dict = self.get_dict(url, headers=headers)
-        stop = False
 
-        while not stop :
+        while True :
             projects = projects_dict['results']
             # Downloading all translations
             for project in projects :
@@ -72,12 +89,11 @@ class Collector:
 
                         # Save the file locally
                         download_directory = self.OS_FOLDER / code
-                        added_updated = self.update_file(response, download_directory, last_change)
+                        added_or_updated_files = self.update_file(response, download_directory, last_change)
                         
-                        if len(added_updated) != 0:
-                            # Updating os_last_update.txt file for preprocessing update
-                            with open(self.OS_FOLDER / self.UPDATED_TRANSLATIONS,"a") as f:
-                                f.writelines(added_updated)
+                        if len(added_or_updated_files) != 0:
+                            # Updating metadatas
+                            self.metadata[self.UPDATED_FILES].extend(added_or_updated_files)
                         
             # Terminating or updating API page
             if projects_dict["next"] == None : break
@@ -86,8 +102,10 @@ class Collector:
                 projects_dict = self.get_dict(projects_dict["next"], headers=headers)
 
         terminate_VPN()
-
-
+        
+        # Saving the metadatas in the file
+        with open(self.METADATA_FILE, 'w', encoding='utf-8') as f:
+            json.dump(self.metadata, f, indent=4)
 
         return 0
 
@@ -164,8 +182,8 @@ class Collector:
                 # Checking if an update is required
                 if os.path.exists(path) :
                     df = pd.read_csv(path, encoding='utf-8')
-                    prev_dt = datetime.strptime(df["last-update"][0], self.TIME_FORMAT)
-                    if prev_dt >= last_dt : print(f"{files} already up-to-date.")
+                    current_dt = datetime.strptime(df["last-update"][0], self.TIME_FORMAT)
+                    if current_dt >= last_dt : print(f"{files} already up-to-date.")
                     else : update = True
 
                 # Updating the files if required
@@ -194,7 +212,7 @@ class Collector:
                         if update : print(f"Updated : {path}")
                         else : print(f"Downloaded : {path}")
 
-                        added_updated.append(str(download_directory / file) + "\n")
+                        added_updated.append(str(download_directory / file))
 
                     return added_updated
                         
@@ -255,8 +273,7 @@ class Collector:
         print(f"Archive name: {archive_name}")
 
         # Checking if the zip file has been updated
-        new_zip_file = self.update_zip_file(download_directory, archive_name, tar_url_date, 
-                                    self.ZIP_VERSIONS)
+        new_zip_file = self.update_zip_file(download_directory, archive_name, tar_url_date)
         if not new_zip_file : return 1
 
         # Define the path to the archive
@@ -264,7 +281,7 @@ class Collector:
 
         ### Downloading archive if required
         if archive_path.exists():
-            print(f"{archive_name} already downloaded.")
+            print(f"{archive_name} already downloaded. \nCAUTION : ASSUMING IT'S THE LAST VERSION OF THE ARCHIVE")
         else:
             response = requests.get(tar_url)
             if response.status_code != 200 :
@@ -275,8 +292,7 @@ class Collector:
             print(f"{archive_path} downloaded.")
 
         ### Save the last update date
-        with open(download_directory / self.ZIP_VERSIONS, 'w', encoding='utf-8') as f:
-            f.write(f"{archive_name};{tar_url_date.strftime(self.TIME_FORMAT)}")
+        self.metadata[self.ARCH_VERSIONS][archive_name] = tar_url_date.strftime(self.TIME_FORMAT)
         
         ### Extract all files to the output directory
         total_added_updated = []
@@ -289,7 +305,11 @@ class Collector:
                     # Building file path
                     raw_path = Path(translation.name).with_suffix('')
                     raw_path_list = str(raw_path).split('\\')
-                    tmp_path = download_directory / Path(f'{raw_path_list[1]}/{raw_path_list[2]}-{raw_path_list[3]}-{raw_path_list[1]}.csv')
+                    try :
+                        tmp_path = download_directory / Path(f'{raw_path_list[1]}/{raw_path_list[2]}-{raw_path_list[3]}-{raw_path_list[1]}.csv')
+                    except :
+                        print(f"Error for {raw_path_list}, check what happened !")
+                        continue
 
                     # Opening the file
                     f = tar_ref.extractfile(translation)
@@ -298,18 +318,15 @@ class Collector:
                     content = f.read()
                     updated = self.po_to_csv(content.decode('utf-8').split('\n'), tmp_path)
                     if updated :
-                        # Updating os_last_update.txt file for preprocessing update
-                        with open(self.UBUNTU_FOLDER/self.UPDATED_TRANSLATIONS,"a") as f:
-                            f.write(str(tmp_path) + '\n')
-        
+                        # Updating the metadata file for preprocessing update
+                        self.metadata[self.UPDATED_FILES].append(str(tmp_path) + '\n')
 
-        
-        """### Delete the archive
-        os.remove(archive_path) A REMETTRE"""
-
-        # Reorganizing the dataset
-        # TO DO : SAVING OF THE NEW DATE, MOVING CSV files and RENAMING THEM, DELETING ARCHIVE
-        # TO DO : AND DELETE SUBFOLDERS AS WELL
+        ### Saving the metadatas in the file
+        with open(self.METADATA_FILE, 'w', encoding='utf-8') as f:
+            json.dump(self.metadata, f, indent=4)
+                
+        ### Delete the archive
+        os.remove(archive_path)
         
         return 0
 
@@ -331,16 +348,16 @@ class Collector:
         for i, line in enumerate(po_content) :
             if "PO-Revision-Date:" in line :
                 try :
-                    tmp_date = line.split(": ")[1][:-3]#.split('\n"')[0]
-                    tmp_date = datetime.strptime(tmp_date, "%Y-%m-%d %H:%M%z")
+                    last_update = line.split(": ")[1][:-3]
+                    last_update = datetime.strptime(last_update, "%Y-%m-%d %H:%M%z")
 
                     if os.path.exists(csv_path) :
                         df = pd.read_csv(csv_path)
-                        last_update = datetime.strptime(df['last-update'][0], self.TIME_FORMAT)
-                        if last_update >= tmp_date : 
+                        curr_dt = datetime.strptime(df['last-update'][0], self.TIME_FORMAT)
+                        if curr_dt >= last_update : 
                             print(f'{csv_path} already up-to-date.')
                             return False
-                    new_date = datetime.strftime(tmp_date, self.TIME_FORMAT)
+                    new_date = datetime.strftime(last_update, self.TIME_FORMAT)
                 except :
                     continue
             if "msgid" in line :
@@ -368,21 +385,37 @@ class Collector:
 
 
 
-    def update_zip_file(self, download_directory, archive_name, tar_url_date, update_file) :
-        if (download_directory / update_file).exists() :
-            with open(download_directory / update_file, 'r', encoding='utf-8') as f:
-                updates = f.readlines()
-                for (i,line) in enumerate(updates) :
-                    if archive_name in line :
-                        last_update = line.split(';')[1]
-                        last_update = datetime.strptime(last_update, self.TIME_FORMAT)
+    def update_zip_file(self, download_directory, archive_name, tar_url_date) :
 
-                        if last_update >= tar_url_date :
-                            print("Translation already up-to-date.")
-                            return False
-                        else :
-                            print("Translation needs an update.")
-                            updates.pop(i)
-                            return True
+        if archive_name in self.metadata[self.ARCH_VERSIONS] :
+            last_update = self.metadata[self.ARCH_VERSIONS][archive_name]
+            last_update = datetime.strptime(last_update, self.TIME_FORMAT)
+
+            if last_update >= tar_url_date :
+                print("Translation already up-to-date.")
+                return False
+            else :
+                print("Translation needs an update.")
                 return True
+            
         else : return True
+
+    #---------------- METADA MANAGEMENT ----------------------------#
+    def empty_updated_files(self) :
+        self.metadata[self.UPDATED_FILES] = []
+        with open(self.METADATA_FILE, "w", encoding='utf-8') as f :
+            json.dump(self.metadata, f, indent=4)
+
+    def empty_archive_files(self) :
+        self.metadata[self.ARCH_VERSIONS] = {}
+        with open(self.METADATA_FILE, "w", encoding='utf-8') as f :
+            json.dump(self.metadata, f, indent=4)
+    
+    def reset_metadata(self) :
+        self.metadata = {
+            self.UPDATED_FILES : [],
+            self.ARCH_VERSIONS : {}
+        }
+        with open(self.METADATA_FILE, "w", encoding='utf-8') as f :
+            json.dump(self.metadata, f, indent=4)
+
