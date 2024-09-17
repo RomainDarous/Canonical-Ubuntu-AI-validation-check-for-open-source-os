@@ -18,8 +18,10 @@ class Collector:
     """
 
     # Constants
-    OS_FOLDER = Path('./os_by_language/dataset')
+    OS_FOLDER = Path('./os_by_language')
     UBUNTU_FOLDER = OS_FOLDER
+    OS_DATASET = OS_FOLDER / 'dataset'
+    UBUNTU_DATASET = OS_DATASET
 
     # Metadata of the dataset
     TIME_FORMAT = '%Y-%m-%d %H:%M:%S.%f'
@@ -46,7 +48,7 @@ class Collector:
 
     #---------------------------------- WEBLATE TRANSLATIONS ------------------------------------#
 
-    def get_all_translations(self, api_url: str, api_key: str, wanted_projects:list) -> int :
+    def get_all_translations(self, api_url: str, api_key: str, wanted_projects:list) -> None :
         """Function that gets all translations of a list of Weblate projects
 
 
@@ -56,58 +58,63 @@ class Collector:
             wanted_projects (list): list of project names, or words that must be in the name of the project
 
         Returns:
-            int: 0 to inform the function terminated
+            None: 0 to inform the function terminated
         """   
+        try :
+            # Headers for authentication
+            headers = {
+                "Content-Type": "application/json"
+            }
+            if api_key != "" : headers["Authorization"] = f"Token {api_key}"
 
-        # Headers for authentication
-        headers = {
-            "Content-Type": "application/json"
-        }
-        if api_key != "" : headers["Authorization"] = f"Token {api_key}"
+            # Connecting to VPN and to the API
+            initialize_VPN(save = 1, area_input=['random countries europe 10'])
+            url = f"{api_url}projects/"
+            projects_dict = self.get_dict(url, headers=headers)
 
-        # Connecting to VPN and to the API
-        initialize_VPN(save = 1, area_input=['random countries europe 10'])
-        url = f"{api_url}projects/"
-        projects_dict = self.get_dict(url, headers=headers)
+            while True :
+                projects = projects_dict['results']
+                # Downloading all translations
+                for project in projects :
+                    if wanted_projects[0] == "ALL" or self.is_in_wanted_projects(project, wanted_projects) : 
+                        languages = self.get_dict(project["languages_url"], headers = headers)
 
-        while True :
-            projects = projects_dict['results']
-            # Downloading all translations
-            for project in projects :
-                if wanted_projects[0] == "ALL" or self.is_in_wanted_projects(project, wanted_projects) : 
-                    languages = self.get_dict(project["languages_url"], headers = headers)
+                        for language in languages :
+                            code = language["code"]
+                            if code == 'en' : continue
+                            last_change = language["last_change"]
+                            language_url = language["url"]
 
-                    for language in languages :
-                        code = language["code"]
-                        if code == 'en' : continue
-                        last_change = language["last_change"]
-                        language_url = language["url"]
+                            # getting the csv files
+                            download_url = language_url.replace("projects", "download") + "?format=zip:csv"
+                            response = requests.get(download_url)
 
-                        # getting the csv files
-                        download_url = language_url.replace("projects", "download") + "?format=zip:csv"
-                        response = requests.get(download_url)
+                            # Save the file locally
+                            download_directory = self.OS_DATASET / code
+                            added_or_updated_files = self.update_file(response, download_directory, last_change)
+                            
+                            if len(added_or_updated_files) != 0:
+                                # Updating metadatas
+                                self.metadata[self.UPDATED_FILES].extend(added_or_updated_files)
+                            
+                # Terminating or updating API page
+                if projects_dict["next"] == None : break
+                else :
+                    print("\n", projects_dict["next"])
+                    projects_dict = self.get_dict(projects_dict["next"], headers=headers)
 
-                        # Save the file locally
-                        download_directory = self.OS_FOLDER / code
-                        added_or_updated_files = self.update_file(response, download_directory, last_change)
-                        
-                        if len(added_or_updated_files) != 0:
-                            # Updating metadatas
-                            self.metadata[self.UPDATED_FILES].extend(added_or_updated_files)
-                        
-            # Terminating or updating API page
-            if projects_dict["next"] == None : break
-            else :
-                print("\n", projects_dict["next"])
-                projects_dict = self.get_dict(projects_dict["next"], headers=headers)
+        except KeyboardInterrupt :
+            print("Program interrupted by user.")
 
-        terminate_VPN()
-        
-        # Saving the metadatas in the file
-        with open(self.METADATA_FILE, 'w', encoding='utf-8') as f:
-            json.dump(self.metadata, f, indent=4)
+        except Exception as e :
+            print(f"An error has occured : {e}")
 
-        return 0
+        finally :
+            terminate_VPN()
+            # Saving the metadatas in the file
+            with open(self.METADATA_FILE, 'w', encoding='utf-8') as f:
+                json.dump(self.metadata, f, indent=4)
+
 
     def get_dict(self, url: str, headers: dict) -> dict :
         """Checks if a http requests is successful. Otherwise, changes the VPN and try again
@@ -220,7 +227,7 @@ class Collector:
             print(f"Failed to download the file. Status code: {response.status_code}")
         return []
 
-    def is_in_wanted_projects(self, project: dict, wanted_projects: list) :
+    def is_in_wanted_projects(self, project: dict, wanted_projects: list) -> bool :
         """Checks whether the current project is part of the wanted projects
 
         Args:
@@ -237,7 +244,7 @@ class Collector:
 
     #------------------------- UBUNTU TRANSLATIONS on LAUNCHPAD ------------------------------- #
 
-    def get_ubuntu_translation(self, url: str) -> int :
+    def get_ubuntu_translation(self, url: str) -> None :
         """Checks if Ubuntu translations have been updated and/or must be updated
 
         Args:
@@ -246,89 +253,95 @@ class Collector:
         Returns:
             int: 0 to confirm the function ended normally, 1 if the translation has not been updated
         """
-
-        # HTTP request to Launchpad
-        response = requests.get(url)
-        if response.status_code != 200 :
-            print(f"Failed to access Launchpad. Status code: {response.status_code}")
-            return 1
-        
-        # Getting the download link
-        soup = BeautifulSoup(response.text, 'html.parser')
-        tar_url_component = soup.find_all('a', {'class': 'sprite download'})[0]
-        tar_url = tar_url_component.get('href')
-
-        # Getting last update date
-        tar_url_text = tar_url_component.text.replace(" ", "").replace('\n', '').replace("UTC", "")
-        tar_url_date = datetime.strptime(tar_url_text, '%Y-%m-%d%H:%M:%S')
-        
-
-        # Define the download directory
-        download_directory = self.UBUNTU_FOLDER
-        download_directory.mkdir(parents=True, exist_ok=True)
-
-
-        ### Get the name of the archive
-        archive_name = tar_url.split('/')[-1]
-        print(f"Archive name: {archive_name}")
-
-        # Checking if the zip file has been updated
-        new_zip_file = self.update_zip_file(download_directory, archive_name, tar_url_date)
-        if not new_zip_file : return 1
-
-        # Define the path to the archive
-        archive_path = download_directory / archive_name
-
-        ### Downloading archive if required
-        if archive_path.exists():
-            print(f"{archive_name} already downloaded. \nCAUTION : ASSUMING IT'S THE LAST VERSION OF THE ARCHIVE")
-        else:
-            response = requests.get(tar_url)
+        try :
+            # HTTP request to Launchpad
+            response = requests.get(url)
             if response.status_code != 200 :
-                print(f"Failed to download the file. Status code: {response.status_code}")
-                return 2
-            with open(archive_path, 'wb') as f:
-                f.write(response.content)
-            print(f"{archive_path} downloaded.")
+                print(f"Failed to access Launchpad. Status code: {response.status_code}")
+                return
+            
+            # Getting the download link
+            soup = BeautifulSoup(response.text, 'html.parser')
+            tar_url_component = soup.find_all('a', {'class': 'sprite download'})[0]
+            tar_url = tar_url_component.get('href')
 
-        ### Save the last update date
-        self.metadata[self.ARCH_VERSIONS][archive_name] = tar_url_date.strftime(self.TIME_FORMAT)
+            # Getting last update date
+            tar_url_text = tar_url_component.text.replace(" ", "").replace('\n', '').replace("UTC", "")
+            tar_url_date = datetime.strptime(tar_url_text, '%Y-%m-%d%H:%M:%S')
+            
+
+            # Define the download directory
+            archive_directory = self.UBUNTU_FOLDER
+            archive_directory.mkdir(parents=True, exist_ok=True)
+
+
+            ### Get the name of the archive
+            archive_name = tar_url.split('/')[-1]
+            print(f"Archive name: {archive_name}")
+
+            # Checking if the zip file has been updated
+            new_zip_file = self.update_zip_file(archive_name, tar_url_date)
+            if not new_zip_file : return
+
+            # Define the path to the archive
+            archive_path = archive_directory / archive_name
+
+            ### Downloading archive if required
+            if archive_path.exists():
+                print(f"{archive_name} already downloaded. \nCAUTION : ASSUMING IT'S THE LAST VERSION OF THE ARCHIVE")
+            else:
+                response = requests.get(tar_url)
+                if response.status_code != 200 :
+                    print(f"Failed to download the file. Status code: {response.status_code}")
+                    return
+                with open(archive_path, 'wb') as f:
+                    f.write(response.content)
+                print(f"{archive_path} downloaded.")
+
+            ### Save the last update date
+            self.metadata[self.ARCH_VERSIONS][archive_name] = tar_url_date.strftime(self.TIME_FORMAT)
+            
+            ### Extract all files to the output directory
+            with tarfile.open(archive_path, 'r:gz') as tar_ref:
+                translations = tar_ref.getmembers()
+                for translation in translations :
+                    if translation.isdir() :
+                        print("Exploring ", translation.name)
+                    elif translation.isfile() :
+                        # Building file path
+                        raw_path = Path(translation.name).with_suffix('')
+                        raw_path_list = str(raw_path).split('\\')
+                        try :
+                            tmp_path = self.UBUNTU_DATASET / Path(f'{raw_path_list[1]}/{raw_path_list[2]}-{raw_path_list[3]}-{raw_path_list[1]}.csv')
+                        except :
+                            print(f"Error for {raw_path_list}, check what happened !")
+                            with open("errors.txt", "a") as f :
+                                f.write(f"Error for {raw_path_list}, check what happened !\n")
+                            continue
+
+                        # Opening the file
+                        f = tar_ref.extractfile(translation)
+                        if f is None : continue
+
+                        content = f.read()
+                        updated = self.po_to_csv(content.decode('utf-8').split('\n'), tmp_path)
+                        if updated :
+                            # Updating the metadata file for preprocessing update
+                            self.metadata[self.UPDATED_FILES].append(str(tmp_path))
+
+            ### Delete the archive
+            os.remove(archive_path)
+            
+        except KeyboardInterrupt :
+            print("Program interrupted by the user")
+
+        except Exception as e :
+            print(f"An error has occured : {e}")
         
-        ### Extract all files to the output directory
-        total_added_updated = []
-        with tarfile.open(archive_path, 'r:gz') as tar_ref:
-            translations = tar_ref.getmembers()
-            for translation in translations :
-                if translation.isdir() :
-                    print("Exploring ", translation.name)
-                elif translation.isfile() :
-                    # Building file path
-                    raw_path = Path(translation.name).with_suffix('')
-                    raw_path_list = str(raw_path).split('\\')
-                    try :
-                        tmp_path = download_directory / Path(f'{raw_path_list[1]}/{raw_path_list[2]}-{raw_path_list[3]}-{raw_path_list[1]}.csv')
-                    except :
-                        print(f"Error for {raw_path_list}, check what happened !")
-                        continue
-
-                    # Opening the file
-                    f = tar_ref.extractfile(translation)
-                    if f is None : continue
-
-                    content = f.read()
-                    updated = self.po_to_csv(content.decode('utf-8').split('\n'), tmp_path)
-                    if updated :
-                        # Updating the metadata file for preprocessing update
-                        self.metadata[self.UPDATED_FILES].append(str(tmp_path) + '\n')
-
-        ### Saving the metadatas in the file
-        with open(self.METADATA_FILE, 'w', encoding='utf-8') as f:
-            json.dump(self.metadata, f, indent=4)
-                
-        ### Delete the archive
-        os.remove(archive_path)
-        
-        return 0
+        finally :
+            ### Saving the metadatas in the file
+            with open(self.METADATA_FILE, 'w', encoding='utf-8') as f:
+                json.dump(self.metadata, f, indent=4)
 
 
     def po_to_csv(self, po_content: list, csv_path: Path) -> bool :
@@ -341,35 +354,73 @@ class Collector:
         Returns:
             bool: True if the file has been created/updated, False otherwise
         """    
-
-
+        # The translation in the target language
         tmp_translation = []
-        new_date = None
-        for i, line in enumerate(po_content) :
-            if "PO-Revision-Date:" in line :
-                try :
-                    last_update = line.split(": ")[1][:-3]
-                    last_update = datetime.strptime(last_update, "%Y-%m-%d %H:%M%z")
 
-                    if os.path.exists(csv_path) :
-                        df = pd.read_csv(csv_path)
-                        curr_dt = datetime.strptime(df['last-update'][0], self.TIME_FORMAT)
-                        if curr_dt >= last_update : 
-                            print(f'{csv_path} already up-to-date.')
-                            return False
-                    new_date = datetime.strftime(last_update, self.TIME_FORMAT)
+        # Update check
+        new_date = None
+        creat_date = None
+        rev_date = None
+
+        for i, line in enumerate(po_content) :
+
+            # Getting Revision date
+            if "PO-Revision-Date" in line :
+                try :
+                    rev_date = line.split(": ")[1][:-3]
+                    rev_date = datetime.strptime(rev_date, "%Y-%m-%d %H:%M%z")
+                except:
+                    continue
+            
+            # Getting Creation date
+            elif "POT-Creation-Date" in line :
+                try :
+                    creat_date = line.split(": ")[1][:-3]
+                    creat_date = datetime.strptime(creat_date, "%Y-%m-%d %H:%M%z")
                 except :
                     continue
-            if "msgid" in line :
+
+            # Saving translations
+            elif "msgid" in line :
                 try :
                     line = line.replace(' ', '')
                     id = line.split('"')[1]
                     str = po_content[i+1].split('"')[1]
                     if len(id) != 0 and len(str) != 0:
-                        tmp_translation.append([id.lower(), str.lower()])
-                        
+                        tmp_translation.append([id.lower(), str.lower()])                  
                 except :
                     continue
+            
+            # If the creation and revision dates are scrapped, check if an update is required
+            if creat_date and rev_date and os.path.exists(csv_path) :
+                df = pd.read_csv(csv_path)
+                curr_dt = datetime.strptime(df['last-update'][0], self.TIME_FORMAT)
+
+                if curr_dt >= max(rev_date, creat_date) : 
+                    print(f'{csv_path} already up-to-date.')
+                    return False
+                new_date = datetime.strftime(max(rev_date, creat_date), self.TIME_FORMAT)
+        
+        # First case when creat_date not collected
+        if not creat_date and rev_date and os.path.exists(csv_path) :
+            df = pd.read_csv(csv_path)
+            curr_dt = datetime.strptime(df['last-update'][0], self.TIME_FORMAT)
+
+            if curr_dt >= rev_date : 
+                print(f'{csv_path} already up-to-date.')
+                return False
+            new_date = datetime.strftime(rev_date, self.TIME_FORMAT)
+
+        # Second case when rev_date not collected
+        elif not rev_date and creat_date and os.path.exists(csv_path) :
+            df = pd.read_csv(csv_path)
+            curr_dt = datetime.strptime(df['last-update'][0], self.TIME_FORMAT)
+
+            if curr_dt >= creat_date : 
+                print(f'{csv_path} already up-to-date.')
+                return False
+            new_date = datetime.strftime(creat_date, self.TIME_FORMAT)
+
         
         dataframe = pd.DataFrame(tmp_translation, columns=['source', 'target'])
         if dataframe.empty :
@@ -385,7 +436,7 @@ class Collector:
 
 
 
-    def update_zip_file(self, download_directory, archive_name, tar_url_date) :
+    def update_zip_file(self, archive_name, tar_url_date) :
 
         if archive_name in self.metadata[self.ARCH_VERSIONS] :
             last_update = self.metadata[self.ARCH_VERSIONS][archive_name]
