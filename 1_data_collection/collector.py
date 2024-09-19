@@ -1,5 +1,6 @@
 import io
 from pathlib import Path
+import sys
 import requests
 import zipfile
 import pandas as pd
@@ -9,12 +10,21 @@ from nordvpn_switcher import initialize_VPN, rotate_VPN, terminate_VPN
 from bs4 import BeautifulSoup
 import tarfile
 import json
+import traceback
 
 class Collector:
-    """_summary_
+    """A class used to collect translations from Weblate and Ubuntu Launchpad.
 
     Attributes:
-        _type_: _description_
+        OS_FOLDER (Path): Path to the folder containing OS translations.
+        UBUNTU_FOLDER (Path): Path to the folder containing Ubuntu translations.
+        OS_DATASET (Path): Path to the dataset folder for OS translations.
+        UBUNTU_DATASET (Path): Path to the dataset folder for Ubuntu translations.
+        TIME_FORMAT (str): Format for timestamps.
+        AWARE (str): Timezone awareness format.
+        METADATA_FILE (Path): Path to the metadata file.
+        UPDATED_FILES (str): Key for updated files in metadata.
+        ARCH_VERSIONS (str): Key for archive versions in metadata.
     """
 
     # Constants
@@ -25,11 +35,17 @@ class Collector:
 
     # Metadata of the dataset
     TIME_FORMAT = '%Y-%m-%d %H:%M:%S.%f'
+    AWARE = '%z'
     METADATA_FILE = Path('./os_by_language/dataset_metadata.json')
     UPDATED_FILES = "updated_files"
     ARCH_VERSIONS = "archive_versions"
 
     def __init__(self) -> None:
+        """
+        Initializes the Collector instance and loads metadata from the metadata file.
+        If the metadata file is not found or is empty, initializes metadata with default values.
+        """
+
         self.metadata = {}
 
         # Assuming the metadata file already has the good format
@@ -48,18 +64,19 @@ class Collector:
 
     #---------------------------------- WEBLATE TRANSLATIONS ------------------------------------#
 
-    def get_all_translations(self, api_url: str, api_key: str, wanted_projects:list) -> None :
-        """Function that gets all translations of a list of Weblate projects
+    def get_all_translations(self, api_url: str, api_key: str, wanted_projects: list) -> None :
+        """Retrieves all translations of a list of Weblate projects.
 
 
         Args:
-            api_url (str): the url of the used api
-            api_key (str): token to access to the API, None if missing
-            wanted_projects (list): list of project names, or words that must be in the name of the project
+            api_url (str): The URL of the Weblate API.
+            api_key (str): Token to access the API, None if missing.
+            wanted_projects (list): List of project names, or words that must be in the name of the project.
 
         Returns:
-            None: 0 to inform the function terminated
+            None
         """   
+
         try :
             # Headers for authentication
             headers = {
@@ -108,6 +125,8 @@ class Collector:
 
         except Exception as e :
             print(f"An error has occured : {e}")
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            traceback.print_exception(exc_type, exc_value, exc_traceback)
 
         finally :
             terminate_VPN()
@@ -117,14 +136,14 @@ class Collector:
 
 
     def get_dict(self, url: str, headers: dict) -> dict :
-        """Checks if a http requests is successful. Otherwise, changes the VPN and try again
+        """Checks if a http requests is successful. Otherwise, changes the VPN and tries again.
 
         Args:
-            url (str): url we want to access to
-            headers (dict): headers of the url request
+            url (str): URL to access.
+            headers (dict): Headers of the url request.
 
         Returns:
-            dict: the json file of the request reponse, empty dict if couldn't connect
+            dict: The json response of the request reponse, empty dict if couldn't connect.
         """
 
         response = requests.get(url, headers=headers)
@@ -145,15 +164,15 @@ class Collector:
 
 
     def update_file(self, response: requests.Response, download_directory: Path, last_change: str) -> list[str] :
-        """Check if the language of the current project is downloaded / needs an update
+        """Checks if the language of the current project is downloaded or needs an update.
 
         Args:
-            response (requests.Response): the response of the HTTP request used to get the zip file of the translations
-            download_directory (Path): the path where the translation files should be downloaded
-            last_change (str): last update for a given project and language (for all components of the project)
+            response (requests.Response): The response of the HTTP request used to get the zip file of the translations.
+            download_directory (Path): The path where the translation files should be downloaded.
+            last_change (str): Last update for a given project and language (for all components of the project).
 
         Returns:
-            list[str]: list of added or updated files
+            list[str]: List of added or updated files.
         """    
 
         download_directory.mkdir(parents=True, exist_ok=True)
@@ -228,14 +247,14 @@ class Collector:
         return []
 
     def is_in_wanted_projects(self, project: dict, wanted_projects: list) -> bool :
-        """Checks whether the current project is part of the wanted projects
+        """Checks whether or not the current project is part of the wanted projects.
 
         Args:
-            project (dict): the current project
-            wanted_projects (list): list of project names that want to be saved, or words that their name must contain
+            project (dict): The current project.
+            wanted_projects (list): List of project names that want to be saved, or words that their name must contain.
 
         Returns:
-        None: returns None
+            bool: True if the project is in the wanted projects, False otherwise.
         """    
 
         for project_name in wanted_projects :
@@ -245,14 +264,15 @@ class Collector:
     #------------------------- UBUNTU TRANSLATIONS on LAUNCHPAD ------------------------------- #
 
     def get_ubuntu_translation(self, url: str) -> None :
-        """Checks if Ubuntu translations have been updated and/or must be updated
+        """Checks if Ubuntu translations have been updated and/or must be updated.
 
         Args:
-            url (str): the url of the download page
+            url (str): the URL of the download page.
 
         Returns:
-            int: 0 to confirm the function ended normally, 1 if the translation has not been updated
+            None
         """
+
         try :
             # HTTP request to Launchpad
             response = requests.get(url)
@@ -306,7 +326,8 @@ class Collector:
                 translations = tar_ref.getmembers()
                 for translation in translations :
                     if translation.isdir() :
-                        print("Exploring ", translation.name)
+                        #print("Exploring ", translation.name)
+                        pass
                     elif translation.isfile() :
                         # Building file path
                         raw_path = Path(translation.name).with_suffix('')
@@ -329,14 +350,16 @@ class Collector:
                             # Updating the metadata file for preprocessing update
                             self.metadata[self.UPDATED_FILES].append(str(tmp_path))
 
-            ### Delete the archive
-            os.remove(archive_path)
+            """### Delete the archive
+            os.remove(archive_path)"""
             
         except KeyboardInterrupt :
             print("Program interrupted by the user")
 
         except Exception as e :
             print(f"An error has occured : {e}")
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            traceback.print_exception(exc_type, exc_value, exc_traceback)
         
         finally :
             ### Saving the metadatas in the file
@@ -345,31 +368,57 @@ class Collector:
 
 
     def po_to_csv(self, po_content: list, csv_path: Path) -> bool :
-        """Converts a po file to a csv file
+        """Converts a .po file to a .csv file.
 
         Args:
-            po_content (list): .po file, a list of strings
-            csv_path (Path): destination folder for the .csv files
+            po_content (list): .po file content as a list of strings.
+            csv_path (Path): destination .csv file.
 
         Returns:
-            bool: True if the file has been created/updated, False otherwise
+            bool: True if the file has been created/updated, False otherwise.
         """    
         # The translation in the target language
         tmp_translation = []
 
         # Update check
-        new_date = None
-        creat_date = None
-        rev_date = None
+        creat_date = datetime.now()
+        rev_date = datetime.now()
 
         for i, line in enumerate(po_content) :
+            # Saving translations
+            if "msgid" in line :
+                try :
+                    id = line.split('"')[1]
+                    target = po_content[i+1].split('"')[1]
+                    if len(id) != 0 and len(target) != 0:
+                        tmp_translation.append([id.lower(), target.lower()])                  
+                except :
+                    continue
 
             # Getting Revision date
-            if "PO-Revision-Date" in line :
+            elif "PO-Revision-Date" in line :
+                
                 try :
                     rev_date = line.split(": ")[1][:-3]
                     rev_date = datetime.strptime(rev_date, "%Y-%m-%d %H:%M%z")
-                except:
+                    continue
+                    if not os.path.exists(csv_path) : 
+                        print("No .csv file found")
+                        continue
+                    
+                    df = pd.read_csv(csv_path)
+                    if not df['last-update'][0] or not isinstance(df['last-update'][0], str) : 
+                        print("Unable to load the last update time")
+                        continue
+
+                    curr_dt = datetime.strptime(df['last-update'][0], self.TIME_FORMAT)
+                    
+                    if curr_dt >= max(rev_date, creat_date) : 
+                        print(f'{csv_path} already up-to-date.')
+                        return False
+                    
+                except Exception as e:
+                    print(f"An error occured here : {e}")
                     continue
             
             # Getting Creation date
@@ -380,64 +429,31 @@ class Collector:
                 except :
                     continue
 
-            # Saving translations
-            elif "msgid" in line :
-                try :
-                    line = line.replace(' ', '')
-                    id = line.split('"')[1]
-                    str = po_content[i+1].split('"')[1]
-                    if len(id) != 0 and len(str) != 0:
-                        tmp_translation.append([id.lower(), str.lower()])                  
-                except :
-                    continue
-            
-            # If the creation and revision dates are scrapped, check if an update is required
-            if creat_date and rev_date and os.path.exists(csv_path) :
-                df = pd.read_csv(csv_path)
-                curr_dt = datetime.strptime(df['last-update'][0], self.TIME_FORMAT)
-
-                if curr_dt >= max(rev_date, creat_date) : 
-                    print(f'{csv_path} already up-to-date.')
-                    return False
-                new_date = datetime.strftime(max(rev_date, creat_date), self.TIME_FORMAT)
-        
-        # First case when creat_date not collected
-        if not creat_date and rev_date and os.path.exists(csv_path) :
-            df = pd.read_csv(csv_path)
-            curr_dt = datetime.strptime(df['last-update'][0], self.TIME_FORMAT)
-
-            if curr_dt >= rev_date : 
-                print(f'{csv_path} already up-to-date.')
-                return False
-            new_date = datetime.strftime(rev_date, self.TIME_FORMAT)
-
-        # Second case when rev_date not collected
-        elif not rev_date and creat_date and os.path.exists(csv_path) :
-            df = pd.read_csv(csv_path)
-            curr_dt = datetime.strptime(df['last-update'][0], self.TIME_FORMAT)
-
-            if curr_dt >= creat_date : 
-                print(f'{csv_path} already up-to-date.')
-                return False
-            new_date = datetime.strftime(creat_date, self.TIME_FORMAT)
-
-        
+        # Building a new csv file to save
         dataframe = pd.DataFrame(tmp_translation, columns=['source', 'target'])
         if dataframe.empty :
-            print(f"{csv_path} is empty.")
+            #print(f"{csv_path} is empty.")
             return False
         else :
             dataframe['last-update'] = None
-            dataframe.at[0, 'last-update'] = new_date
+            dataframe.at[0, 'last-update'] = datetime.strftime(max(rev_date, creat_date), self.TIME_FORMAT + self.AWARE)
             csv_path.parent.mkdir(parents=True, exist_ok=True) 
             dataframe.to_csv(csv_path, encoding='utf-8', index=False)
-            print(f'Created/Updated : {csv_path}')
+            #print(f'Created/Updated : {csv_path}')
             return True
 
 
 
-    def update_zip_file(self, archive_name, tar_url_date) :
+    def update_zip_file(self, archive_name: str, tar_url_date: datetime) -> bool :
+        """Checks if the zip file needs to be updated based on the archive name and date.
 
+        Args :
+            archive_name (str): Name of the archive.
+            tar_url_date (datetime): Date of the archive URL.
+
+        Returns :
+            bool: True if the zip file needs to be updated, False otherwise.
+        """
         if archive_name in self.metadata[self.ARCH_VERSIONS] :
             last_update = self.metadata[self.ARCH_VERSIONS][archive_name]
             last_update = datetime.strptime(last_update, self.TIME_FORMAT)
@@ -452,17 +468,35 @@ class Collector:
         else : return True
 
     #---------------- METADA MANAGEMENT ----------------------------#
-    def empty_updated_files(self) :
+    def empty_updated_files(self) -> None :
+        """Empties the list of updated files in the metadata and saves it to the metadata file.
+
+        Returns :
+            None
+        """
+
         self.metadata[self.UPDATED_FILES] = []
         with open(self.METADATA_FILE, "w", encoding='utf-8') as f :
             json.dump(self.metadata, f, indent=4)
 
-    def empty_archive_files(self) :
+    def empty_archive_files(self) -> None :
+        """Empties the archive versions in the metadata and saves it to the metadata file.
+        
+        Returns :
+            None
+        """
+
         self.metadata[self.ARCH_VERSIONS] = {}
         with open(self.METADATA_FILE, "w", encoding='utf-8') as f :
             json.dump(self.metadata, f, indent=4)
     
-    def reset_metadata(self) :
+    def reset_metadata(self) -> None :
+        """Resets the metadata to default values and saves it to the metadata file.
+
+        Returns : 
+            None
+        """
+
         self.metadata = {
             self.UPDATED_FILES : [],
             self.ARCH_VERSIONS : {}
