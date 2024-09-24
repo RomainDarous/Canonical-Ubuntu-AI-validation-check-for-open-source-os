@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 import tarfile
 import json
 import traceback
+import numpy as np
 
 class Collector:
     """A class used to collect translations from Weblate and Ubuntu Launchpad.
@@ -88,21 +89,12 @@ class Collector:
             url = f"{api_url}projects/"
             projects_dict = self.get_dict(url, headers=headers)
 
-            passed = False # TO REMOVE
 
             while True :
                 projects = projects_dict['results']
+
                 # Downloading all translations
                 for project in projects :
-                    i = 0
-                    if not passed and project["slug"] != "search-o-o" :
-                        i += 1
-                        if i == 50 : 
-                            print(f"Still searching... : {project["slug"]}")
-                            i = 0
-                        continue # TO REMOVE
-                    passed = True
-
                     os_name, is_wanted = self.is_in_wanted_projects(project, wanted_os)
                     if is_wanted : 
                         languages = self.get_dict(project["languages_url"], headers = headers)
@@ -119,7 +111,7 @@ class Collector:
                             
                         if added_or_updated_files :
                             # Updating metadatas
-                            self.metadata[self.UPDATED_FILES].extend(list(added_or_updated_files))
+                            self.metadata[self.UPDATED_FILES].update(added_or_updated_files)
                             
                 # Terminating or updating API page
                 if projects_dict["next"] == None : break
@@ -213,9 +205,13 @@ class Collector:
                 for file in files :
                     f = zip_ref.read(file)
                     tmp_df = pd.read_csv(io.StringIO(f.decode('utf-8')))
-                    if tmp_df['target'].dropna().empty :
+                    if tmp_df['target'].replace("", np.nan).dropna().empty :
                         #print(f"{file} : {code} translation empty")
                         continue
+
+                    # Small transformations to help the processing part
+                    #tmp_df['target'] = tmp_df['target'].apply(lambda x: f'"{x}"')
+                    tmp_df['target'] = tmp_df['target'].replace("\n", " ")
                     code_df = pd.concat([code_df,tmp_df['target']], ignore_index=True, axis = 0)
 
                 df[code] = code_df.reset_index(drop=True)
@@ -401,6 +397,7 @@ class Collector:
         """    
         # The translation in the target language
         tmp_translation = []
+        tmp_en = []
 
         # Update check
         creat_date = datetime.now()
@@ -410,10 +407,11 @@ class Collector:
             # Saving translations
             if "msgid" in line :
                 try :
-                    id = line.split('"')[1]
-                    target = po_content[i+1].split('"')[1]
+                    id = (f'"{po_content[i].split('"')[1]}"').replace("\n", " ")
+                    target = (f'"{po_content[i+1].split('"')[1]}"').replace("\n", " ")
                     if len(target) != 0: empty = False
-                    tmp_translation.append(target)                  
+                    tmp_translation.append(target)
+                    tmp_en.append(id)                  
                 except :
                     continue
         
@@ -425,8 +423,10 @@ class Collector:
             if os.path.exists(csv_path) : df = pd.read_csv(csv_path)
             else : df = pd.DataFrame()
             tmp_series = pd.Series([datetime.strftime(creat_date, self.TIME_FORMAT)])
-            tmp_series = pd.concat([tmp_series, pd.Series(tmp_translation)], ignore_index=True)
-            df[code] = tmp_series.reset_index(drop=True)
+            tmp_series_for = pd.concat([tmp_series, pd.Series(tmp_translation)], ignore_index=True)
+            tmp_series_en = pd.concat([tmp_series, pd.Series(tmp_en)], ignore_index=True)
+            df[code] = tmp_series_for.reset_index(drop=True)
+            df["en"] = tmp_series_en.reset_index(drop=True)
             df.to_csv(csv_path, encoding='utf-8', index=False)
             return True
 

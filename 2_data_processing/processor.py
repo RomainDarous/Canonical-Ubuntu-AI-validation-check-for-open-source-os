@@ -4,17 +4,21 @@ from pathlib import Path
 import sys
 import os
 import pandas as pd
+import numpy as np
 
 class Processor :
 
     UPDATED_FILES = "updated_files"
     ARCH_VERSIONS = "archive_versions"
     VALID_LANGUAGES = "languages"
-    DATASET_FOLDER = Path('../1_data_collection/os_by_language/dataset')
+    #DATASET_FOLDER = Path('../1_data_collection/os_by_language/dataset')
+    DATASET_FOLDER = Path('./tmp/dataset')
+    METADATA_FILE = Path('../1_data_collection/os_by_language/dataset_metadata.json')
 
-    def __init__(self, metadata_path) :
+
+    def __init__(self) :
         try :
-            with open(metadata_path, 'r', encoding='utf-8') as f :
+            with open(self.METADATA_FILE, 'r', encoding='utf-8') as f :
                 self.metadata = json.load(f)
         except Exception as e :
             print("Error while loading the metadata file. Please try again.")
@@ -29,23 +33,44 @@ class Processor :
             
         else : 
             top_list_dir = os.listdir(self.DATASET_FOLDER)
-            list_dir = [os.listdir(folder) for folder in top_list_dir if os.path.isdir(folder)] # list
+            print(top_list_dir)
+            list_dir = [] # list
+            for sub_folder in top_list_dir :
+                sub_files = os.listdir(self.DATASET_FOLDER / sub_folder)
+                list_dir.extend([self.DATASET_FOLDER / sub_folder / sub_file for sub_file in sub_files])
+            print("passed", list_dir)
 
-        # Start of the cleaning process
+        # Start of the cleaning
         for file in list_dir :
+            print(file)
             df = pd.read_csv(file, encoding='utf-8')
 
-            df.dropna(subset=["en"], inplace=True)
+            # Removing empty strings
+            df.replace("", np.nan, inplace=True)
+            df.dropna(inplace=True)
+            df = df.reset_index(drop=True)
+            
+            if df.iloc[1:].empty :
+                os.remove(file)
+                continue
 
             if update_only : working_df = df[list_dir[file]]
             else : working_df = df
 
-            # Removing empty strings :
-            working_df
+            # Cleaning function
+            cleaned_working_df = self.cleaning(working_df)
 
-        pass
+            # Final replacement
+            if update_only : df[list_dir[file]] = cleaned_working_df
+            else : df = cleaned_working_df
+
+            # Saving the cleaned file
+            df.to_csv(file, encoding='utf-8')
+
+        return
 
     def data_fusion(self) :
+        # REMOVE THE DATE
         pass
 
     def data_resampling(self) :
@@ -55,7 +80,12 @@ class Processor :
         pass
     
     # ----------------- HELP FUNCTIONS ------------------------------- #
-    def load_file_update(self, metadata_path) :
+    def cleaning(self, df) -> pd.DataFrame:
+
+        # Initial refactoring modifications
+        df.replace("\n", " ", inplace=True)
+        return df.reset_index(drop=True)
+
 
     
     
