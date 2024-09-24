@@ -22,7 +22,7 @@ The process of data collection consists in gathering translations from several o
 We made sure that data gathered from different sources are :
 - Formatted the same way and stored grouped by language,
 - Easy to update, 
-- Stored on HuggingFace.
+- Stored on HuggingFace : https://huggingface.co/datasets/RomainDarous/open-source-os-translations.
 
 The code of data collection is available in the folder ``1_data_collection``
 
