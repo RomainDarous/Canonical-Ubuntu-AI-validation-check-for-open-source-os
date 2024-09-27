@@ -1,10 +1,9 @@
-import nltk
 import json
 from pathlib import Path
 import sys
 import os
 import pandas as pd
-import numpy as np
+from bs4 import BeautifulSoup
 
 class Processor :
 
@@ -33,26 +32,29 @@ class Processor :
             
         else : 
             top_list_dir = os.listdir(self.DATASET_FOLDER)
-            print(top_list_dir)
             list_dir = [] # list
             for sub_folder in top_list_dir :
                 sub_files = os.listdir(self.DATASET_FOLDER / sub_folder)
                 list_dir.extend([self.DATASET_FOLDER / sub_folder / sub_file for sub_file in sub_files])
-            print("passed", list_dir)
 
         # Start of the cleaning
         for file in list_dir :
-            print(file)
-            df = pd.read_csv(file, encoding='utf-8')
+            df = pd.DataFrame()
+            for delimiter in ['|', ','] :
+                try : df = pd.read_csv(file, dtype=str, encoding='utf-8', delimiter=delimiter)
+                except : continue
+
+            if df.empty :
+                print(f"Impossible to open {file}")
+                continue
 
             # Removing empty strings
-            df.replace("", np.nan, inplace=True)
-            df.dropna(inplace=True)
-            df = df.reset_index(drop=True)
+            df.dropna(subset=["en"], inplace=True)
             
+            """# Checking that the file is not empty (it shouldn't if data collectin is correctly performed)
             if df.iloc[1:].empty :
                 os.remove(file)
-                continue
+                continue"""
 
             if update_only : working_df = df[list_dir[file]]
             else : working_df = df
@@ -63,14 +65,19 @@ class Processor :
             # Final replacement
             if update_only : df[list_dir[file]] = cleaned_working_df
             else : df = cleaned_working_df
+            
+            df = df.dropna()
 
             # Saving the cleaned file
-            df.to_csv(file, encoding='utf-8')
+            if df.iloc[1:].empty : 
+                os.remove(file)
+                continue
+            else : df.to_csv(file, encoding='utf-8', index = False, sep='|')
 
         return
 
     def data_fusion(self) :
-        # REMOVE THE DATE
+        # REMOVE THE DATE et les guillements
         pass
 
     def data_resampling(self) :
@@ -82,9 +89,45 @@ class Processor :
     # ----------------- HELP FUNCTIONS ------------------------------- #
     def cleaning(self, df) -> pd.DataFrame:
 
-        # Initial refactoring modifications
-        df.replace("\n", " ", inplace=True)
-        return df.reset_index(drop=True)
+        # Removing identical pairs
+        for column in df.columns :
+            if column != 'en' :
+                df[column] = df[column][df[column] != df['en']]
+
+        for column in df.columns :
+            # Removing indentical pairs
+            if column != 'en' :
+                df = df[df[column] != df['en']]
+
+            # Return line
+            df[column] = df[column].str.replace(r'(\n|\r|\t)(\n|\r|\t)*', ' ', regex=True)
+
+            # HTML boxes and links
+            df[column] = df[column].apply(self.remove_html)
+            df[column] = df[column].str.replace(r'http\S+|www\S+', '', regex=True)
+            
+            # Special characters and UTF wrong characters
+            df[column] = df[column].str.replace(r'\[UTF-[^\]]+\]', '', regex=True)
+
+            # Additional removals
+            df[column] = df[column].str.replace(r'\s*@\w+', ' ', regex=True)
+            df[column] = df[column].str.replace(r'(\()*(%[^)]+)(\))*', '', regex=True) # (%s) characters
+            df[column] = df[column].str.replace(r'(\$)*\{[^}]+\}', ' ', regex=True) # ${} characters
+            df[column] = df[column].str.replace(r'\s*[\(\[\{]\s*[\)\]\}]\s*', '', regex=True) # [], {}, etc.
+            df[column] = df[column].str.replace(r'(?<=\s)([^\w\s]+)(?=\s)|^([^\w\s]+)(?=\s)|(?<=\s)([^\w\s]+)$', ' ', regex=True) # sequence of special characters removed
+            df[column] = df[column].str.replace(r'(\')*|(")*|(”)*|(“)*', '', regex=True) # Quotation marks
+            df[column] = df[column].str.replace(r'^--|-', ' ', regex=True) # --output-only -> output only
+
+            # Removing excessive spaces
+            df[column] = df[column].str.replace(r'\s+', ' ', regex=True)
+            df[column] = df[column].str.strip()
+
+        return df
+    
+    def remove_html(self, sentence: str) :
+        if type(sentence) == str : return BeautifulSoup(sentence, 'html.parser').get_text()
+        else : return sentence
+    
 
 
     

@@ -6,6 +6,7 @@ import zipfile
 import pandas as pd
 import os
 from datetime import datetime
+import time
 from nordvpn_switcher import initialize_VPN, rotate_VPN, terminate_VPN
 from bs4 import BeautifulSoup
 import tarfile
@@ -43,6 +44,8 @@ class Collector:
     UPDATED_FILES = "updated_files"
     ARCH_VERSIONS = "archive_versions"
     VALID_LANGUAGES = "languages"
+    WEBLATE_STOP_PROJECT = "weblate_stop"
+    LAUNCHPAD_STOP_PROJECT = "launchpad_stop"
 
     def __init__(self) -> None:
         """
@@ -56,6 +59,7 @@ class Collector:
         try :
             with open(self.METADATA_FILE, 'r', encoding='utf-8') as f :
                 self.metadata = json.load(f)
+            
         except Exception as e :
             print("Error while loading the metadata file. Try again.")
             sys.exit()
@@ -89,12 +93,17 @@ class Collector:
             url = f"{api_url}projects/"
             projects_dict = self.get_dict(url, headers=headers)
 
-
+            passed = False
             while True :
                 projects = projects_dict['results']
 
                 # Downloading all translations
                 for project in projects :
+
+                    # Resume data collection if stopped unexpectidly, to the last open project
+                    if not passed and self.metadata[self.WEBLATE_STOP_PROJECT] and project["slug"] not in self.metadata[self.WEBLATE_STOP_PROJECT] : continue
+                    passed = True
+
                     os_name, is_wanted = self.is_in_wanted_projects(project, wanted_os)
                     if is_wanted : 
                         languages = self.get_dict(project["languages_url"], headers = headers)
@@ -103,21 +112,23 @@ class Collector:
                         download_directory = self.OS_DATASET / os_name
                         download_directory.mkdir(parents=True, exist_ok=True)
 
-                        path = Path(download_directory / project["slug"]).with_suffix('.csv')
+                        path = Path(download_directory / project["slug"])
 
-                        
-
-                        added_or_updated_files = self.update_file(languages, path)
+                        added_or_updated_files = self.update_file(languages, project["slug"], path)
                             
                         if added_or_updated_files :
                             # Updating metadatas
-                            self.metadata[self.UPDATED_FILES].update(added_or_updated_files)
+                            self.metadata[self.UPDATED_FILES].extend(added_or_updated_files)
+                            self.metadata[self.WEBLATE_STOP_PROJECT] = added_or_updated_files[-1]
                             
                 # Terminating or updating API page
                 if projects_dict["next"] == None : break
                 else :
                     print("\n", projects_dict["next"])
                     projects_dict = self.get_dict(projects_dict["next"], headers=headers)
+            
+            # Resetting the stop file in metadata to empty as everything went wel
+            self.metadata[self.WEBLATE_STOP_PROJECT] = ""
 
         except KeyboardInterrupt :
             print("Program interrupted by user.")
@@ -133,8 +144,9 @@ class Collector:
             with open(self.METADATA_FILE, 'w', encoding='utf-8') as f:
                 json.dump(self.metadata, f, indent=4)
 
+    # --------------- WEBLATE HELP FUNCTIONS -------------------------------------------- #
 
-    def update_file(self, languages: dict, path: Path) -> dict :
+    def update_file(self, languages: dict, project: str, path: Path) -> list :
         """Checks if the language of the current project is downloaded or needs an update.
 
         Args:
@@ -146,82 +158,88 @@ class Collector:
         """
 
         response = None
-        update = False
-        df = None
-        added_updated = {}
-        print("File being checked : ", path)
-
-        if os.path.exists(path) : df = pd.read_csv(path, encoding='utf-8')
-        else : df = pd.DataFrame()    
+        added_updated = []
+        print("Project being checked : ", project)
 
         for language in languages['results'] :
+            update = False
             code = language["code"]
-            last_dt = datetime.now()
+            code_path = path.with_name(f'{path.stem}-{code}.csv')
 
+            # Checking if we want the language
             if code not in self.metadata[self.VALID_LANGUAGES] : continue
-            elif code in df : 
-                current_dt = datetime.strptime(df[code][0], self.TIME_FORMAT)
 
-                last_change = language["last_change"]
+            # Getting the update date
+            last_dt = datetime.now()
+            last_change = language["last_change"]
 
+            ### Trying several time formats to load the last update time
+            time_formats = [
+                "%Y-%m-%dT%H:%M:%S.%fZ",
+                '%Y-%m-%dT%H:%M:%SZ',
+                '%Y-%m-%dT%H:%M:%S.%fZ',
+                '%Y-%m-%dT%H:%M:%SZ',
+                '%Y-%m-%d %H:%M:%S',
+                '%Y/%m/%d %H:%M:%S',
+                ]
+            
+            for time_format in time_formats :
+                try : 
+                    last_dt = datetime.strptime(last_change, time_format)
+                    break
+                except : continue
 
-                # Trying several time formats
-                time_formats = [
-                    "%Y-%m-%dT%H:%M:%S.%fZ",
-                    '%Y-%m-%dT%H:%M:%SZ',
-                    '%Y-%m-%dT%H:%M:%S.%fZ',
-                    '%Y-%m-%dT%H:%M:%SZ',
-                    '%Y-%m-%d %H:%M:%S',
-                    '%Y/%m/%d %H:%M:%S',
-                    ]
-                for time_format in time_formats :
-                    try : 
-                        last_dt = datetime.strptime(last_change, time_format)
-                        break
-                    except : continue
+            # Checking if another version of the language is in the dataset
+            if os.path.exists(code_path) : 
+                curr_df = pd.read_csv(code_path, encoding='utf-8')
+                current_dt = datetime.strptime(curr_df[code][0], self.TIME_FORMAT)
 
-                # Comparing dates
+                ### Comparing dates
                 if current_dt >= last_dt : 
-                    #print(f"{path} {code} : already up-to-date.")
                     continue
                 else : 
-                    print(f"{path} {code} : update required")
+                    print(f"{code_path} : update required")
                     update = True
         
-            # getting the csv files
+            # Downloading the csv files of the translations
             language_url = language["url"]
             download_url = language_url.replace("projects", "download") + "?format=zip:csv"
             response = requests.get(download_url)
 
             if response.status_code != 200:
                 print(f"Failed to download the file. Status code: {response.status_code}")
-                return set()
+                return []
             
+            # Opening the files of the language
             with zipfile.ZipFile(io.BytesIO(response.content)) as zip_ref:
-                # Get file names
                 files = zip_ref.namelist()
                 files.sort()
+                trans_df = pd.DataFrame()
+
                 code_df = pd.Series([last_dt.strftime(self.TIME_FORMAT)])
+                en_df = pd.Series([datetime.now().strftime(self.TIME_FORMAT)])
+
                 for file in files :
                     f = zip_ref.read(file)
                     tmp_df = pd.read_csv(io.StringIO(f.decode('utf-8')))
-                    if tmp_df['target'].replace("", np.nan).dropna().empty :
+                    tmp_df = tmp_df.dropna(subset=["source", "target"])
+                    if tmp_df.empty :
                         #print(f"{file} : {code} translation empty")
                         continue
-
-                    # Small transformations to help the processing part
-                    #tmp_df['target'] = tmp_df['target'].apply(lambda x: f'"{x}"')
-                    tmp_df['target'] = tmp_df['target'].replace("\n", " ")
                     code_df = pd.concat([code_df,tmp_df['target']], ignore_index=True, axis = 0)
+                    en_df = pd.concat([en_df,tmp_df['source']], ignore_index=True, axis = 0)
 
-                df[code] = code_df.reset_index(drop=True)
-                if path in added_updated : added_updated[path].append(code)
-                else : added_updated[path] = [code]
+                ### Saving the translation
+                if len(code_df) == 1 : continue
+                trans_df["en"] = en_df
+                trans_df[code] = code_df
+                trans_df.to_csv(code_path, encoding='utf-8', index=False)
+                added_updated.append(str(code_path))
 
-        df.to_csv(path, encoding='utf-8', index=False)
-                        
-        if update : print(f"Updated : {path}")
-        else : print(f"Downloaded : {path}")
+                ### Outputing information in the console
+                if update : print(f"Updated : {code_path}")
+                else : print(f"Downloaded : {code_path}")
+
 
         return added_updated
 
@@ -272,17 +290,17 @@ class Collector:
             return wanted_os[0].split(';')[1], True    
 
         for os_name in wanted_os :
-            if os_name.lower() in project["name"].lower() : return os_name.lower(), True
+            if os_name.lower() in project["slug"].lower() : return os_name.lower(), True
         return None, False
 
     #------------------------- UBUNTU TRANSLATIONS on LAUNCHPAD ------------------------------- #
 
-    def get_ubuntu_translation(self, prefix: str, url: str) -> None :
+    def get_ubuntu_translation(self, project: str, url: str) -> None :
         """Checks if Ubuntu translations have been updated and/or must be updated.
 
         Args:
             url (str): the URL of the download page.
-            prefix (str): string to add to every output file
+            project (str): string to add to every output file
 
         Returns:
             None
@@ -339,19 +357,27 @@ class Collector:
             ### Extract all files to the output directory, storing them by project
             with tarfile.open(archive_path, 'r:gz') as tar_ref:
                 translations = tar_ref.getmembers()
+                
+                passed = False
                 for translation in translations :
                     if translation.isdir() :
                         print("Exploring ", translation.name)
                     elif translation.isfile() :
+
                         # Building file path
                         raw_path = Path(translation.name).with_suffix('')
                         raw_path_list = str(raw_path).split('\\')
-                        file_name = Path(raw_path_list[-1]).with_suffix('.csv')
+                        file_name = Path(raw_path_list[-1])                           
+                        
+                        # Resuming data collection if stopped unexpectidly
+                        if not passed and self.metadata[self.LAUNCHPAD_STOP_PROJECT] and file_name not in self.metadata[self.LAUNCHPAD_STOP_PROJECT] : continue
+                        passed = True
+
                         try :
                             code = raw_path_list[1]
                             if code not in self.metadata[self.VALID_LANGUAGES] : continue
-                            tmp_path = self.UBUNTU_DATASET / prefix / file_name
-                            tmp_path.parent.mkdir(parents=True, exist_ok=True) 
+                            path = self.UBUNTU_DATASET / project / file_name
+                            path.parent.mkdir(parents=True, exist_ok=True) 
 
                         except :
                             print(f"Error for {raw_path}, check what happened !")
@@ -362,13 +388,15 @@ class Collector:
                         if f is None : continue
 
                         content = f.read()
-                        self.po_to_csv(content.decode('utf-8').split('\n'), tmp_path, code)
+                        self.po_to_csv(content.decode('utf-8').split('\n'), path, code)
+                        self.metadata[self.LAUNCHPAD_STOP_PROJECT] = file_name
 
 
             ### Delete the archive
             os.remove(archive_path)
             # Updating the metadata file for preprocessing update
-            self.metadata[self.UPDATED_FILES].append("ALL;ubuntu")
+            self.metadata[self.UPDATED_FILES].append("ALL;ubuntu-noble")
+            self.metadata[self.LAUNCHPAD_STOP_PROJECT] = ""
             
         except KeyboardInterrupt :
             print("Program interrupted by the user")
@@ -384,12 +412,13 @@ class Collector:
                 json.dump(self.metadata, f, indent=4)
 
 
-    def po_to_csv(self, po_content: list, csv_path: Path, code: str) -> bool :
+    # ---------------------- LAUNCHPAD HELP FUNCTIONS ---------------------------- #
+    def po_to_csv(self, po_content: list, path: Path, code: str) -> bool :
         """Converts a .po file to a .csv file.
 
         Args:
             po_content (list): .po file content as a list of strings.
-            csv_path (Path): destination .csv file.
+            path (Path): destination .csv file.
             code: the ISO code of the language.
 
         Returns:
@@ -398,6 +427,7 @@ class Collector:
         # The translation in the target language
         tmp_translation = []
         tmp_en = []
+        code_path = path.with_name(f"{path.stem}-{code}.csv")
 
         # Update check
         creat_date = datetime.now()
@@ -407,9 +437,11 @@ class Collector:
             # Saving translations
             if "msgid" in line :
                 try :
-                    id = (f'"{po_content[i].split('"')[1]}"').replace("\n", " ")
-                    target = (f'"{po_content[i+1].split('"')[1]}"').replace("\n", " ")
-                    if len(target) != 0: empty = False
+                    id_list = po_content[i].split('"')
+                    target_list = po_content[i+1].split('"')
+                    id = (f'"{' '.join(id_list[1:])}"')
+                    target = (f'"{' '.join(target_list[1:])}"')
+                    if len(target) > 2 : empty = False
                     tmp_translation.append(target)
                     tmp_en.append(id)                  
                 except :
@@ -417,17 +449,17 @@ class Collector:
         
         # Building a new csv file to save
         if empty :
-            print(f"{csv_path} {code} is empty.")
+            print(f"{code_path} is empty.")
             return False
         else :
-            if os.path.exists(csv_path) : df = pd.read_csv(csv_path)
+            if os.path.exists(code_path) : df = pd.read_csv(code_path)
             else : df = pd.DataFrame()
             tmp_series = pd.Series([datetime.strftime(creat_date, self.TIME_FORMAT)])
             tmp_series_for = pd.concat([tmp_series, pd.Series(tmp_translation)], ignore_index=True)
             tmp_series_en = pd.concat([tmp_series, pd.Series(tmp_en)], ignore_index=True)
-            df[code] = tmp_series_for.reset_index(drop=True)
             df["en"] = tmp_series_en.reset_index(drop=True)
-            df.to_csv(csv_path, encoding='utf-8', index=False)
+            df[code] = tmp_series_for.reset_index(drop=True)
+            df.to_csv(code_path, encoding='utf-8', index=False)
             return True
 
 
@@ -455,7 +487,7 @@ class Collector:
             
         else : return True
 
-    #---------------- METADA MANAGEMENT ----------------------------#
+    #---------------------------- METADA MANAGEMENT ---------------------------------#
     def empty_updated_files(self) -> None :
         """Empties the list of updated files in the metadata and saves it to the metadata file.
 
