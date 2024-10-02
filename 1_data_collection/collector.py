@@ -222,7 +222,7 @@ class Collector:
                 for file in files :
                     f = zip_ref.read(file)
                     tmp_df = pd.read_csv(io.StringIO(f.decode('utf-8')))
-                    tmp_df = tmp_df.dropna(subset=["source", "target"])
+                    tmp_df = tmp_df.replace('', np.nan).dropna(subset=["source", "target"])
                     if tmp_df.empty :
                         #print(f"{file} : {code} translation empty")
                         continue
@@ -370,7 +370,7 @@ class Collector:
                         file_name = Path(raw_path_list[-1])                           
                         
                         # Resuming data collection if stopped unexpectidly
-                        if not passed and self.metadata[self.LAUNCHPAD_STOP_PROJECT] and file_name not in self.metadata[self.LAUNCHPAD_STOP_PROJECT] : continue
+                        if not passed and self.metadata[self.LAUNCHPAD_STOP_PROJECT] and file_name != self.metadata[self.LAUNCHPAD_STOP_PROJECT] : continue
                         passed = True
 
                         try :
@@ -389,7 +389,7 @@ class Collector:
 
                         content = f.read()
                         self.po_to_csv(content.decode('utf-8').split('\n'), path, code)
-                        self.metadata[self.LAUNCHPAD_STOP_PROJECT] = file_name
+                        self.metadata[self.LAUNCHPAD_STOP_PROJECT] = str(file_name)
 
 
             ### Delete the archive

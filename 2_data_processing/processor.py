@@ -4,6 +4,7 @@ import sys
 import os
 import pandas as pd
 from bs4 import BeautifulSoup
+import numpy as np
 
 class Processor :
 
@@ -40,7 +41,7 @@ class Processor :
         # Start of the cleaning
         for file in list_dir :
             df = pd.DataFrame()
-            for delimiter in ['|', ','] :
+            for delimiter in ['|',','] :
                 try : df = pd.read_csv(file, dtype=str, encoding='utf-8', delimiter=delimiter)
                 except : continue
 
@@ -49,6 +50,7 @@ class Processor :
                 continue
 
             # Removing empty strings
+            df.replace('', np.nan, inplace=True)
             df.dropna(subset=["en"], inplace=True)
             
             """# Checking that the file is not empty (it shouldn't if data collectin is correctly performed)
@@ -59,15 +61,17 @@ class Processor :
             if update_only : working_df = df[list_dir[file]]
             else : working_df = df
 
+
             # Cleaning function
             cleaned_working_df = self.cleaning(working_df)
 
             # Final replacement
             if update_only : df[list_dir[file]] = cleaned_working_df
             else : df = cleaned_working_df
-            
-            df = df.dropna()
 
+            df.replace('', np.nan, inplace=True)
+            df.dropna(inplace=True)
+            
             # Saving the cleaned file
             if df.iloc[1:].empty : 
                 os.remove(file)
@@ -98,9 +102,11 @@ class Processor :
             # Removing indentical pairs
             if column != 'en' :
                 df = df[df[column] != df['en']]
+                df = df[(df[column] != column) & (df['en'] != 'en')]
 
             # Return line
             df[column] = df[column].str.replace(r'(\n|\r|\t)(\n|\r|\t)*', ' ', regex=True)
+            df[column] = df[column].str.replace(r'(\\n|\\r|\\t)(\\n|\\r|\\t)*', ' ', regex=True)
 
             # HTML boxes and links
             df[column] = df[column].apply(self.remove_html)
@@ -113,15 +119,17 @@ class Processor :
             df[column] = df[column].str.replace(r'\s*@\w+', ' ', regex=True)
             df[column] = df[column].str.replace(r'(\()*(%[^)]+)(\))*', '', regex=True) # (%s) characters
             df[column] = df[column].str.replace(r'(\$)*\{[^}]+\}', ' ', regex=True) # ${} characters
-            df[column] = df[column].str.replace(r'\s*[\(\[\{]\s*[\)\]\}]\s*', '', regex=True) # [], {}, etc.
+            df[column] = df[column].str.replace(r'\s*[\(\[]\s*[\)\]]\s*', '', regex=True) # {}, () empty, etc.
+            df[column] = df[column].str.replace(r'(\[)*|(\])*', '', regex=True) # all the [ and ] brackets
+
             df[column] = df[column].str.replace(r'(?<=\s)([^\w\s]+)(?=\s)|^([^\w\s]+)(?=\s)|(?<=\s)([^\w\s]+)$', ' ', regex=True) # sequence of special characters removed
-            df[column] = df[column].str.replace(r'(\')*|(")*|(”)*|(“)*', '', regex=True) # Quotation marks
-            df[column] = df[column].str.replace(r'^--|-', ' ', regex=True) # --output-only -> output only
+            df[column] = df[column].str.replace(r'(`)*|(\')*|(")*|(”)*|(“)*', '', regex=True) # Quotation marks
+            df[column] = df[column].str.replace(r'^-+|-', ' ', regex=True) # --output-only -> output only
 
             # Removing excessive spaces
             df[column] = df[column].str.replace(r'\s+', ' ', regex=True)
             df[column] = df[column].str.strip()
-
+    
         return df
     
     def remove_html(self, sentence: str) :
