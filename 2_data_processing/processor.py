@@ -11,7 +11,7 @@ from typing import Dict
 
 class Processor:
     # Collected data metadata
-    METADATA_FILE_COL = Path('../1_data_collection/os_by_language/dataset_metadata.json')
+    METADATA_FILE_01 = Path('../1_data_collection/os_by_language/metadata_01.json')
     UPDATED_FILES = "updated_files"
     ARCH_VERSIONS = "archive_versions"
     VALID_LANGUAGES = "languages"
@@ -20,7 +20,7 @@ class Processor:
 
     
     MERGED_DATASET = Path('./2_os_by_language/datasets')
-    METADATA_FILE_PROC = Path('./2_os_by_language/2_dataset_metadata.json')
+    METADATA_FILE_02 = Path('./2_os_by_language/metadata.json')
     LAST_MERGED_FILE = Path('./2_os_by_language/last_merged_file.txt')
     LAST_CLEANED_FILE = Path('./2_os_by_language/last_cleaned_file.txt')
 
@@ -32,7 +32,7 @@ class Processor:
         self.list_dir = None
 
         try:
-            with open(self.METADATA_FILE_COL, 'r', encoding='utf-8') as f:
+            with open(self.METADATA_FILE_01, 'r', encoding='utf-8') as f:
                 self.metadata = json.load(f)
         except Exception as e:
             print("Error while loading the metadata file. Please try again.")

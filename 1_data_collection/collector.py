@@ -40,12 +40,13 @@ class Collector:
     # Metadata of the dataset
     TIME_FORMAT = '%Y-%m-%d %H:%M:%S.%f'
     AWARE = '%z'
-    METADATA_FILE = Path('./os_by_language/dataset_metadata.json')
+    METADATA_FILE = Path('./os_by_language/metadata_01.json')
     UPDATED_FILES = "updated_files"
     ARCH_VERSIONS = "archive_versions"
     VALID_LANGUAGES = "languages"
     WEBLATE_STOP_PROJECT = "weblate_stop"
     LAUNCHPAD_STOP_PROJECT = "launchpad_stop"
+    ALL_FILES = "all_files"
 
     def __init__(self) -> None:
         """
@@ -100,7 +101,7 @@ class Collector:
                 # Downloading all translations
                 for project in projects :
 
-                    # Resume data collection if stopped unexpectidly, to the last open project
+                    # Resume data collection if stopped unexpectidly, to the last opened project
                     if not passed and self.metadata[self.WEBLATE_STOP_PROJECT] and project["slug"] not in self.metadata[self.WEBLATE_STOP_PROJECT] : continue
                     passed = True
 
@@ -113,13 +114,7 @@ class Collector:
                         download_directory.mkdir(parents=True, exist_ok=True)
 
                         path = Path(download_directory / project["slug"])
-
-                        added_or_updated_files = self.update_file(languages, project["slug"], path)
-                            
-                        if added_or_updated_files :
-                            # Updating metadatas
-                            self.metadata[self.UPDATED_FILES].extend(added_or_updated_files)
-                            self.metadata[self.WEBLATE_STOP_PROJECT] = added_or_updated_files[-1]
+                        self.update_file(languages, project["slug"], path)
                             
                 # Terminating or updating API page
                 if projects_dict["next"] == None : break
@@ -146,7 +141,7 @@ class Collector:
 
     # --------------- WEBLATE HELP FUNCTIONS -------------------------------------------- #
 
-    def update_file(self, languages: dict, project: str, path: Path) -> list :
+    def update_file(self, languages: dict, project: str, path: Path) -> None :
         """Checks if the language of the current project is downloaded or needs an update.
 
         Args:
@@ -158,7 +153,6 @@ class Collector:
         """
 
         response = None
-        added_updated = []
         print("Project being checked : ", project)
 
         for language in languages['results'] :
@@ -191,8 +185,7 @@ class Collector:
 
             # Checking if another version of the language is in the dataset
             if os.path.exists(code_path) : 
-                curr_df = pd.read_csv(code_path, encoding='utf-8')
-                current_dt = datetime.strptime(curr_df[code][0], self.TIME_FORMAT)
+                current_dt = self.metadata[self.ALL_FILES][str(code_path)]
 
                 ### Comparing dates
                 if current_dt >= last_dt : 
@@ -208,7 +201,7 @@ class Collector:
 
             if response.status_code != 200:
                 print(f"Failed to download the file. Status code: {response.status_code}")
-                return []
+                return
             
             # Opening the files of the language
             with zipfile.ZipFile(io.BytesIO(response.content)) as zip_ref:
@@ -216,8 +209,8 @@ class Collector:
                 files.sort()
                 trans_df = pd.DataFrame()
 
-                code_df = pd.Series([last_dt.strftime(self.TIME_FORMAT)])
-                en_df = pd.Series([datetime.now().strftime(self.TIME_FORMAT)])
+                code_df = pd.Series([])
+                en_df = pd.Series([])
 
                 for file in files :
                     f = zip_ref.read(file)
@@ -234,14 +227,17 @@ class Collector:
                 trans_df["en"] = en_df
                 trans_df[code] = code_df
                 trans_df.to_csv(code_path, encoding='utf-8', index=False)
-                added_updated.append(str(code_path))
+                
+                ### Saving the updated/created files and their last update date
+                self.metadata[self.ALL_FILES][str(code_path)] = last_dt.strftime(self.TIME_FORMAT)
+                self.metadata[self.UPDATED_FILES].append(str(code_path))
+                self.metadata[self.WEBLATE_STOP_PROJECT] = str(code_path)
 
                 ### Outputing information in the console
                 if update : print(f"Updated : {code_path}")
                 else : print(f"Downloaded : {code_path}")
 
-
-        return added_updated
+        return
 
     
     def get_dict(self, url: str, headers: dict) -> dict :
@@ -454,9 +450,8 @@ class Collector:
         else :
             if os.path.exists(code_path) : df = pd.read_csv(code_path)
             else : df = pd.DataFrame()
-            tmp_series = pd.Series([datetime.strftime(creat_date, self.TIME_FORMAT)])
-            tmp_series_for = pd.concat([tmp_series, pd.Series(tmp_translation)], ignore_index=True)
-            tmp_series_en = pd.concat([tmp_series, pd.Series(tmp_en)], ignore_index=True)
+            tmp_series_for = pd.Series(tmp_translation)
+            tmp_series_en = pd.Series(tmp_en)
             df["en"] = tmp_series_en.reset_index(drop=True)
             df[code] = tmp_series_for.reset_index(drop=True)
             df.to_csv(code_path, encoding='utf-8', index=False)
@@ -507,6 +502,17 @@ class Collector:
         """
 
         self.metadata[self.ARCH_VERSIONS] = {}
+        with open(self.METADATA_FILE, "w", encoding='utf-8') as f :
+            json.dump(self.metadata, f, indent=4)
+    
+    def empty_all_files(self) -> None :
+        """Empties the list of all files in the metadata and saves it to the metadata file.
+
+        Returns :
+            None
+        """
+
+        self.metadata[self.ALL_FILES] = {}
         with open(self.METADATA_FILE, "w", encoding='utf-8') as f :
             json.dump(self.metadata, f, indent=4)
 
