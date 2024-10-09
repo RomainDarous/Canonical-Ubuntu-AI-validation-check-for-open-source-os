@@ -15,8 +15,8 @@ class Processor:
     UPDATED_FILES = "updated_files"
     ARCH_VERSIONS = "archive_versions"
     VALID_LANGUAGES = "languages"
-    #COLLECTED_DATASET_FOLDER = Path('../1_data_collection/os_by_language/dataset')
-    COLLECTED_DATASET_FOLDER = Path('./tmp/dataset/')
+    COLLECTED_DATASET_FOLDER = Path('../1_data_collection/os_by_language/dataset')
+    #COLLECTED_DATASET_FOLDER = Path('./tmp/dataset/')
 
     
     MERGED_DATASET = Path('./2_os_by_language/datasets')
@@ -27,6 +27,7 @@ class Processor:
     def __init__(self):
         # Downloading nltk databases
         nltk.download('punkt')
+        nltk.download('punkt_tab')
         nltk.download('wordnet')
 
         self.list_dir = None
@@ -39,7 +40,14 @@ class Processor:
             sys.exit()
 
     def data_cleaning(self, update_only=False):
+        """Performs cleaning of the dataset
+
+        Args:
+            update_only (bool, optional): True if you want to clean only updated files from the dataset. Defaults to False.
+        """
+
         print("STARTING THE CLEANING PROCESS...")
+
         # Checking if the cleaning must be performed on a subset of the dataset
         if update_only: 
             self.list_dir = self.metadata[self.UPDATED_FILES]  # dict
@@ -58,7 +66,7 @@ class Processor:
             # Start of the cleaning
             for i in range(last_idx, len(self.list_dir)):
                 file = self.list_dir[i]
-                if i%20 == 0 : print(f'File being cleaned : {file}')
+                if i%10 == 0 : print(f'File being cleaned : {file}')
 
                 df = pd.DataFrame()
                 for delimiter in ['|', ',', '\t']:
@@ -79,31 +87,33 @@ class Processor:
                 if update_only: 
                     working_df = df.loc[:, self.list_dir[file]]
                 else: 
-                    working_df = df
+                    working_df = df.loc[:, :]
 
                 # Cleaning function
                 cleaned_working_df = self.cleaning(working_df)
 
                 # Final replacement
                 if update_only: 
-                    df.loc[:, self.list_dir[file]] = cleaned_working_df
+                    df.loc[:, self.list_dir[file]] = cleaned_working_df.loc[:, :]
                 else: 
-                    df = cleaned_working_df
+                    df = cleaned_working_df.loc[:, :]
 
                 df.replace('', np.nan, inplace=True)
                 df.dropna(inplace=True)
                 
                 # Saving the cleaned file
-                if df.empty: 
+                if df.empty:
                     os.remove(file)
                     continue
                 else: 
+                    df['label'] = 1 # adding a label column
                     df.to_csv(file, encoding='utf-8', index=False, sep='\t')
 
             # Deleting the resume file
             if os.path.exists(self.LAST_CLEANED_FILE) : os.remove(self.LAST_CLEANED_FILE)
+
         except Exception as e :
-            print(f"Exception {e} occured")
+            print(f"DATA CLEANING exception : {e}")
             with open(self.LAST_CLEANED_FILE, "w", encoding='utf-8') as f :
                 f.write(str(file))
             
@@ -112,12 +122,15 @@ class Processor:
 
     
     def data_merging(self) :
+        """ Merges all the files to build monolanguage datasets
+
+        """
         print("STARTING THE MERGING PROCESS...")
         # Start of the fusion
         dataset_dict : Dict[str, pd.DataFrame] = {}
 
         # Checking if the cleaning must be performed on a subset of the dataset
-        if not self.list_dir: self.list_dir = self.load_collected_files()
+        self.list_dir = self.load_collected_files()
         
         if len(self.list_dir) == 0 : 
             print("No datafile found to merge")
@@ -131,32 +144,42 @@ class Processor:
             # Concatenating files of the same language
             for i in range(last_idx, len(self.list_dir)):
                 file = self.list_dir[i]
-                if i%20 == 0 : print(f'File being merged : {file}')
+                if not os.path.exists(file) : 
+                    print("File not found : {file}")
+                    continue
+                if i%50 == 0 : print(f'File being merged : {file}')
 
                 code = str(file.with_suffix('')).split('-')[-1]
                 if code not in dataset_dict : dataset_dict[code] = pd.DataFrame()
-                print(file)
                 tmp_df = pd.read_csv(file, delimiter='\t')
                 dataset_dict[code] = pd.concat([dataset_dict[code], tmp_df], ignore_index=True)
 
             # Deleting the resume file
             if os.path.exists(self.LAST_MERGED_FILE) : os.remove(self.LAST_MERGED_FILE)
         except Exception as e :
-            print(f"The error {e} occured")
+            print(f"DATA MERGING ERROR : {e}")
             with open(self.LAST_MERGED_FILE, "w", encoding='utf-8') as f :
                 f.write(str(file))
         
         finally :
             # Saving merged datasets
+            self.MERGED_DATASET.mkdir(parents=True, exist_ok=True)
             for code in dataset_dict :
-                dataset_dict[code].to_csv(self.MERGED_DATASET / f'os-dataset-{code}.csv', index=False)
+                dataset_dict[code].to_csv(self.MERGED_DATASET / f'os-dataset-{code}.csv', index=False, sep='\t')
             return
 
 
 
 
     # ----------------- HELP FUNCTIONS ------------------------------- #
-    def cleaning(self, df) -> pd.DataFrame:
+    def cleaning(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Performs cleaning of the dataset in input for training.
+
+        Args:
+            df (pd.Datafrale): the input dataframe to clean
+        Returns:
+            pd.DataFrame: a cleaned version of the input dataframe
+        """
         type_clean = [
             r'http\S+|www\S+',                      # Remove URLs
             r'\[UTF-[^\]]+\]',                      # Remove UTF characters
@@ -166,14 +189,14 @@ class Processor:
             r'(?<!^)(?=[A-Z])(?![A-Z])',            # Split attached words
             r'\b(?:\d{1,3}\.){3}\d{1,3}\b',         # IPv4
             r'\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b|(?:[0-9a-fA-F]{1,4}:){1,7}:|(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|\b::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}\b', # IPv6
-            r'\b(?:\d+\.)+\d+\b',                    # Removing 4.6.5.3 like sequences
+            r'\b(?:\d+\.)+\d+\b',                    # Removing 4.6.5.3-like sequences
         ]
 
         char_clean = [
             r'(\$)*\{[^}]+\}',                      # Remove ($){} characters
             r'\((\()*\)(\))*',                      # Remove ((())))) types of strings
-            r'\[(\[)*|\](\])*|\/(\/)*|\(\)*',      # Remove all [ and ] brackets
-            r'(?<=\s)([^\w\s?!]+)(?=\s)|^([^\w\s?!]+)(?=\s)|(?<=\s)([^\w\s?!]+)$',  # Remove special characters
+            r'\[(\[)*|\](\])*|\/(\/)*',      # Remove all [ and ] brackets
+            r'(?<=\s)([^\w\s?!:;]+)(?=\s)|^([^\w\s?!:;]+)(?=\s)|(?<=\s)([^\w\s?!:;]+)$',  # Remove special characters
             r'``*| \'(\')*|""*|””*|““*',           # Remove various quotation marks
         ]
 
@@ -182,6 +205,11 @@ class Processor:
             if column != 'en':
                 df = df[(df.loc[:,column] != df['en']) & (df.loc[:,column] != column) & (df['en'] != 'en')]
 
+            else :
+                # Checking that the English version contains proper English words
+                df.loc[:,column] = df.loc[:,column].apply(self.is_english)
+            
+            # Cleaning all the columns
             df.loc[:,column] = df.loc[:,column].apply(self.remove_html)
             df.loc[:,column] = df.loc[:,column].str.replace('|'.join(type_clean), ' ', regex=True)
             df.loc[:,column] = df.loc[:,column].str.replace('|'.join(char_clean), ' ', regex=True)
@@ -189,30 +217,53 @@ class Processor:
             # Removing excessive spaces
             df.loc[:,column] = df.loc[:,column].str.replace(r'\s+', ' ', regex=True).str.strip()
 
-            # Checking that the English version contains proper English words
-            df.loc[:,column] = df.loc[:,column].apply(self.is_english)
-
         return df
     
     def remove_html(self, sentence: str) -> str:
+        """Removes html content from the data
+
+        Args:
+            sentence (str): the string to process
+
+        Returns:
+            str: the string free from any html code
+        """
         if isinstance(sentence, str): 
             return BeautifulSoup(sentence, 'html.parser').get_text()
         return sentence
 
     def is_english(self, sentence: str) -> str:
+        """Checks that the english string is not only made of acronyms that have no translation
+
+        Args:
+            sentence (str): the string to check
+
+        Returns:
+            str: the original string if more than a third of words are english, an empty string otherwise
+        """
+        if not sentence : return ''
         words = nltk.word_tokenize(sentence)
         en_count = np.sum([1 if bool(wordnet.synsets(word.lower())) else 0 for word in words])
+        
         if en_count / len(words) > 0.33: 
             return sentence
-        return ''
+        else : return ''
     
     def resume(self, resume_file: Path) -> int :
+        """Resume data concatenation or merging if interrupted
+
+        Args:
+            resume_file (Path): the last file that has to be checked
+
+        Returns:
+            int: the idx on the file list to process corresponding to the file
+        """
         try :
-            # Resuming data concatenation if interrupted
             last_file = None
             if os.path.exists(resume_file) :
                 with open(resume_file, 'r', encoding='utf-8')as f :
                     last_file = f.readline()
+            else : return 0
 
             last_idx = 0
             if last_file and self.list_dir:
@@ -220,7 +271,12 @@ class Processor:
             return last_idx
         except : return 0
 
-    def load_collected_files(self) :
+    def load_collected_files(self) -> list :
+        """Gets all file paths of the dataset into a list
+
+        Returns:
+            list: The list of the files
+        """
         top_list_dir = os.listdir(self.COLLECTED_DATASET_FOLDER)
         list_dir = []  # list
         for sub_folder in top_list_dir:

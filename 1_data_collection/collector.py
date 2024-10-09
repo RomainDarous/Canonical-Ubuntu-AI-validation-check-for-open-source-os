@@ -185,7 +185,7 @@ class Collector:
 
             # Checking if another version of the language is in the dataset
             if os.path.exists(code_path) : 
-                current_dt = self.metadata[self.ALL_FILES][str(code_path)]
+                current_dt = datetime.strptime(self.metadata[self.ALL_FILES][str(code_path)], self.TIME_FORMAT)
 
                 ### Comparing dates
                 if current_dt >= last_dt : 
