@@ -1,4 +1,5 @@
-
+# Créer une fonction qui permet de choisir le modèle avant de fine-tune (entre mean-pooling et generalized pooling)
+# Citer
 
 """
 This example loads the pre-trained SentenceTransformer model 'nli-distilroberta-base-v2' from Hugging Face.

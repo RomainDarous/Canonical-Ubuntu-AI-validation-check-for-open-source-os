@@ -15,7 +15,7 @@ class Processor:
     UPDATED_FILES = "updated_files"
     ARCH_VERSIONS = "archive_versions"
     VALID_LANGUAGES = "languages"
-    COLLECTED_DATASET_FOLDER = Path('../1_data_collection/os_by_language/dataset')
+    #COLLECTED_DATASET_FOLDER = Path('../1_data_collection/os_by_language/dataset')
     #COLLECTED_DATASET_FOLDER = Path('./tmp/dataset/')
 
     
@@ -23,6 +23,8 @@ class Processor:
     METADATA_FILE_02 = Path('./2_os_by_language/metadata.json')
     LAST_MERGED_FILE = Path('./2_os_by_language/last_merged_file.txt')
     LAST_CLEANED_FILE = Path('./2_os_by_language/last_cleaned_file.txt')
+
+    COLLECTED_DATASET_FOLDER = MERGED_DATASET
 
     def __init__(self):
         # Downloading nltk databases
@@ -181,6 +183,7 @@ class Processor:
             pd.DataFrame: a cleaned version of the input dataframe
         """
         type_clean = [
+            r'\n(\n)*|\t(\t)*|'
             r'http\S+|www\S+',                      # Remove URLs
             r'\[UTF-[^\]]+\]',                      # Remove UTF characters
             r'\s*@\w+',                             # Remove mentions like @username
@@ -280,6 +283,8 @@ class Processor:
         top_list_dir = os.listdir(self.COLLECTED_DATASET_FOLDER)
         list_dir = []  # list
         for sub_folder in top_list_dir:
-            sub_files = os.listdir(self.COLLECTED_DATASET_FOLDER / sub_folder)
-            list_dir.extend([self.COLLECTED_DATASET_FOLDER / sub_folder / sub_file for sub_file in sub_files])
+            if not (self.COLLECTED_DATASET_FOLDER / sub_folder).is_dir(): list_dir.append(self.COLLECTED_DATASET_FOLDER / sub_folder)
+            else :
+                sub_files = os.listdir(self.COLLECTED_DATASET_FOLDER / sub_folder)
+                list_dir.extend([self.COLLECTED_DATASET_FOLDER / sub_folder / sub_file for sub_file in sub_files])
         return list_dir
