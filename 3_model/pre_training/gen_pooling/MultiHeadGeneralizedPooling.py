@@ -3,9 +3,10 @@ from torch import nn
 import torch.nn.functional as F
 
 class MultiHeadGeneralizedPooling(nn.Module):
-    def __init__(self, embedding_dim: int = 768, hidden_dim: int = 512, num_heads: int = 8):
+    def __init__(self, embedding_dim: int = 768, hidden_dim: int = 512, num_heads: int = 8, mean_pooling_init=True):
         """
-        Initialize the MultiHeadGeneralizedPooling class based on multi-head pooling formula.
+        Initialize the MultiHeadGeneralizedPooling class based on multi-head pooling formula. If mean_pooling_init is True, initialize the pooling mechanism
+        to behave like mean pooling (i.e., equal weights for all tokens across heads).
         
         Args:
             embedding_dim (int): The dimension of the token embeddings (output of the transformer).
@@ -19,6 +20,21 @@ class MultiHeadGeneralizedPooling(nn.Module):
         # Define learnable weights and biases for each head
         self.W1 = nn.ModuleList([nn.Linear(embedding_dim, hidden_dim) for _ in range(num_heads)])  # W1^i for each head
         self.W2 = nn.ModuleList([nn.Linear(hidden_dim, 1) for _ in range(num_heads)])  # W2^i for each head
+
+        # Optionally initialize to behave like mean pooling
+        if mean_pooling_init:
+            self.initialize_mean_pooling()
+
+    def initialize_mean_pooling(self):
+        """
+        Initialize weights to simulate mean pooling by making the attention distribution uniform for each head.
+        """
+        # Initialize all heads with weights that simulate mean pooling
+        for i in range(self.num_heads):
+            nn.init.constant_(self.W1[i].weight, 0)  # Set W1 weights to 0
+            nn.init.constant_(self.W1[i].bias, 0)    # Set W1 bias to 0
+            nn.init.constant_(self.W2[i].weight, 0)  # Set W2 weights to 0
+            nn.init.constant_(self.W2[i].bias, 1)    # Set W2 bias to 1, ensuring equal output for each token
 
     def forward(self, token_embeddings: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
         """
