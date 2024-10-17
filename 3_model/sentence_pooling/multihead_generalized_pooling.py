@@ -14,7 +14,7 @@ import os
 import json
 
 class MultiHeadGeneralizedPooling(nn.Module):
-    def __init__(self, token_dim: int = 768, sentence_dim: int = 768, num_heads: int = 1, mean_pooling_init=True):
+    def __init__(self, token_dim: int = 768, sentence_dim: int = 768, num_heads: int = 8, mean_pooling_init=True):
         """
         Initialize the MultiHeadGeneralizedPooling class based on multi-head pooling formula. If mean_pooling_init is True, initialize the pooling mechanism
         to behave like mean pooling (i.e., equal weights for all tokens across heads).
@@ -50,7 +50,9 @@ class MultiHeadGeneralizedPooling(nn.Module):
             nn.init.constant_(self.W1[i].bias, 0)    # Set W1 bias to 0
             nn.init.constant_(self.W2[i].weight, 0)  # Set W2 weights to 0
             nn.init.constant_(self.W2[i].bias, 1)    # Set W2 bias to 1, ensuring equal output for each token
-            nn.init.eye_(self.P[i].weight)           # Initialize weight to identity matrix
+            
+            nn.init.constant_(self.P[i].weight, 0)   # Initialize weight to identity matrix
+            nn.init.eye_(self.P[i].weight[:, self.head_dim * i : self.head_dim * (i + 1)]) # Initialize the projections to successively be a slice of the original embedding matrix
             nn.init.constant_(self.P[i].bias, 0)     # Set bias to 0
     def forward(self, features: dict[str, torch.Tensor], **kwargs) -> dict   [str, torch.Tensor]:
         """

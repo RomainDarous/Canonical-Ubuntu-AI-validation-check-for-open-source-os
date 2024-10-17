@@ -1,6 +1,8 @@
+# Fonction ébauche, non fonctionnelle !!!!!
+
 import torch
 from sentence_transformers import SentenceTransformer, models
-from .MultiHeadGeneralizedPooling import MultiHeadGeneralizedPooling
+from gen_pooling.multihead_generalized_pooling import *
 
 # Step 1: Load the existing SentenceTransformer model
 existing_model = SentenceTransformer("sentence-transformers/distiluse-base-multilingual-cased-v2")
@@ -22,8 +24,8 @@ print(model)
 
 import torch
 from torch.utils.data import DataLoader, Dataset, RandomSampler
-from sentence_transformers import SentenceTransformer
 from torch.optim import Adam
+from sentence_transformers import SentenceTransformer
 
 # Assuming you have a custom Dataset
 class CustomDataset(Dataset):
@@ -47,10 +49,10 @@ dataloader = DataLoader(dataset, batch_size=2, sampler=RandomSampler(dataset))
 
 # Initialize the model
 optimizer = Adam(model.parameters(), lr=1e-5)
-loss_fn = CustomLoss()
 
 # Step 4: Training Loop
 model.train()
+num_epochs = 10_000
 for epoch in range(num_epochs):
     for batch_sentences, batch_labels in dataloader:
         optimizer.zero_grad()
@@ -59,10 +61,6 @@ for epoch in range(num_epochs):
         embeddings = model.encode(batch_sentences, convert_to_tensor=True)
 
         # Compute the loss
-        loss = loss_fn(embeddings, batch_labels)
-
+        # MISSING
         # Backward pass and optimization
-        loss.backward()
         optimizer.step()
-
-    print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {loss.item()}")
