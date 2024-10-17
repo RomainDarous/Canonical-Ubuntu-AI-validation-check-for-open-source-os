@@ -11,10 +11,10 @@ dense_layer = existing_model[2]   # Dense layer
 
 
 # Step 3: Create the new SentenceTransformer model
-decay_mean_pooling = MultiHeadGeneralizedPooling(token_dim=transformer.get_word_embedding_dimension())
+generalized_pooling = MultiHeadGeneralizedPooling(token_dim=transformer.get_word_embedding_dimension())
 
 # Build the new model using the reused components
-model = SentenceTransformer(modules=[transformer, decay_mean_pooling, dense_layer])
+model = SentenceTransformer(modules=[transformer, generalized_pooling, dense_layer])
 
 # Step 4: Print the new model architecture
 print(model)
