@@ -73,19 +73,15 @@ class MultiHeadGeneralizedPooling(nn.Module):
             # Linear transformation with ReLU for each head: W1^i * H^T + b1^i
             H = features["token_embeddings"] # (batch_size, seq_len, token_dim)
             H_i = self.P[i](H)
-            print("projected", H_i.shape)
             A_i = self.W1[i](H_i)  # (batch_size, seq_len, hidden_dim) for head i
-            print("W1", A_i.shape)
             A_i = F.relu(A_i)  # Apply ReLU activation
 
             # Second linear transformation: W2^i * ReLU(W1^i * H^T + b1^i)
             A_i = self.W2[i](A_i)  # (batch_size, seq_len, token_dim) for head i
-            print("W2", A_i.shape)
 
             # Apply softmax to get attention weights for head i
             attention_mask_expanded = attention_mask.repeat(1, 1, self.head_dim)
             A_i = F.softmax(A_i + attention_mask_expanded.log(), dim=1)  # Softmax along seq_len
-            print("attention mask",attention_mask_expanded.shape)
             
 
             # Apply attention weights to get the weighted sum of token embeddings for head i

@@ -2,7 +2,7 @@
 
 import torch
 from sentence_transformers import SentenceTransformer, models
-from gen_pooling.multihead_generalized_pooling import *
+from sentence_pooling import *
 
 # Step 1: Load the existing SentenceTransformer model
 existing_model = SentenceTransformer("sentence-transformers/distiluse-base-multilingual-cased-v2")
@@ -24,7 +24,7 @@ print(model)
 
 import torch
 from torch.utils.data import DataLoader, Dataset, RandomSampler
-from torch.optim import Adam
+from torch.optim import Adam  # type: ignore
 from sentence_transformers import SentenceTransformer
 
 # Assuming you have a custom Dataset
