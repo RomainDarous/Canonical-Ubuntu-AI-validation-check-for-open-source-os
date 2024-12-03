@@ -19,7 +19,7 @@ class Corruptor:
     CORRUPTED_FILES = "corrupted_files"
     ROW_NUMBER = "raws_per_file"
     MERGED_DATASET = Path('./2_os_by_language/datasets')
-
+    HATEFUL_DATASET = Path('./multilingual_hateful_sets/data')
 
     ACCEPTED_LANGUAGES = [
         "Arabic", "Basque", "Breton", "Catalan", "Chinese_China", "Chinese_Hongkong", 
@@ -202,6 +202,7 @@ class Corruptor:
         return list_dir
     
     def load_all_multilingual_datasets(self) -> None :
+        """
         # MLMA dataset
         mlma_hate_speech = load_dataset("nedjmaou/MLMA_hate_speech", split="train")
         if isinstance(mlma_hate_speech, Dataset) : self.update_hatespeech_dataset(["fr", "ar", "en"], [mlma_hate_speech])
@@ -215,17 +216,50 @@ class Corruptor:
                     offenseval_2020[split] = (offenseval_2020[split].select_columns(["text"])).rename_column("text", "sentence")
                 self.update_hatespeech_dataset([config], [offenseval_2020[split] for split in offenseval_2020.keys()])
             else : print(f"Error loading OffensEval2020 dataset")
+        """
 
-        
+        # CONAN
+        df = pd.read_csv(self.HATEFUL_DATASET / "italian_french_english_CONAN.csv", delimiter=",", encoding='utf-8')
+        df = df[["hateSpeech"]].drop_duplicates()
+        dataset = Dataset.from_pandas(df.reset_index(drop=True))
+        dataset = dataset.rename_column("hateSpeech", "sentence")
+        self.update_hatespeech_dataset(["it", "en", "fr"], [dataset])
 
+        # Russian and Ukrainian dataset
+        df = pd.read_csv(self.HATEFUL_DATASET / "ukrainian_data.csv", delimiter=",")
+        df = df[["text"]].drop_duplicates()
+        dataset = Dataset.from_pandas(df.reset_index(drop=True))
+        self.update_hatespeech_dataset(["uk", "ru"], [dataset])
 
         return
     
     def load_all_monolingual_datasets(self) -> None :
-        return
+        self.load_albanian_datasets()
+        self.load_arabic_datasets()
+        self.load_bengali_datasets()
+        self.load_chinese_datasets()
+        self.load_dutch_datasets()
+        self.load_english_datasets()
+        self.load_german_datasets()
+        self.load_hindi_datasets()
+        self.load_indonesian_datasets()
+        self.load_italian_datasets()
+        self.load_korean_datasets()
+        self.load_latvian_datasets()
+        self.load_portuguese_datasets()
+        self.load_russian_datasets()
+        self.load_spanish_datasets()
+        self.load_ukrainian_datasets()
+        self.load_urdu_datasets()
     
     def load_albanian_datasets(self) -> None :
-        return
+        # Albanian hate speech set
+        df = pd.read_csv(self.HATEFUL_DATASET / "albanian_hate_speech.csv", delimiter=';', encoding='utf-8')
+        df = df[["text"]].drop_duplicates()
+        dataset = Dataset.from_pandas(df.reset_index(drop=True))
+        dataset = dataset.rename_column("text", "sentence")
+        self.update_hatespeech_dataset(["sq"], [dataset])
+
     
     def load_arabic_datasets(self) -> None :
         dataset = Dataset()
@@ -358,5 +392,7 @@ class Corruptor:
         for language in languages :
             if language in self.mult_hate_speech.keys() :
                 datasets.append(self.mult_hate_speech[language])
+                self.mult_hate_speech[language] = concatenate_datasets(datasets)
+            else :
                 self.mult_hate_speech[language] = concatenate_datasets(datasets)
         return
