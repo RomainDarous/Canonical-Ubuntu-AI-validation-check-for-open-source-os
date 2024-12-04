@@ -260,7 +260,7 @@ class Corruptor:
         df = pd.read_csv(self.HATEFUL_DATASET / "albanian_hate_speech.csv", delimiter=';', encoding='utf-8')
         df = df[["text"]].drop_duplicates()
         dataset = Dataset.from_pandas(df.reset_index(drop=True))
-        dataset = dataset.rename_column("text", self.HATE_COLUMN_NAME)
+        if "text" != self.HATE_COLUMN_NAME : dataset = dataset.rename_column("text", self.HATE_COLUMN_NAME)
         datasets.append(dataset)
 
         self.update_hatespeech_dataset(["sq"], datasets)
@@ -273,14 +273,14 @@ class Corruptor:
         df = pd.read_csv(self.HATEFUL_DATASET / "arabic-L-HSAB.txt", delimiter='\t', encoding='utf-8')
         df = df[["tweet"]].drop_duplicates()
         dataset = Dataset.from_pandas(df.reset_index(drop=True))
-        dataset = dataset.rename_column("tweet", self.HATE_COLUMN_NAME)
+        if "tweet" != self.HATE_COLUMN_NAME : dataset = dataset.rename_column("tweet", self.HATE_COLUMN_NAME)
         datasets.append(dataset)
 
         # Let-Mi dataset
         df = pd.read_csv(self.HATEFUL_DATASET / "arabic-Let-Mi.csv", delimiter=',', encoding='utf-8')
         df = df[["text"]].drop_duplicates()
         dataset = Dataset.from_pandas(df.reset_index(drop=True))
-        dataset = dataset.rename_column("text", self.HATE_COLUMN_NAME)
+        if "text" != self.HATE_COLUMN_NAME : dataset = dataset.rename_column("text", self.HATE_COLUMN_NAME)
         datasets.append(dataset)
 
         self.update_hatespeech_dataset(["ar"], datasets)
@@ -293,7 +293,7 @@ class Corruptor:
         df = pd.read_csv(self.HATEFUL_DATASET / "bengali_hate_speech.csv", delimiter=',', encoding='utf-8')
         df = df[["sentence"]].drop_duplicates()
         dataset = Dataset.from_pandas(df.reset_index(drop=True))
-        dataset = dataset.rename_column("sentence", self.HATE_COLUMN_NAME)
+        if "sentence" != self.HATE_COLUMN_NAME : dataset = dataset.rename_column("sentence", self.HATE_COLUMN_NAME)
         datasets.append(dataset)
 
         self.update_hatespeech_dataset(["bn"], datasets)
@@ -307,7 +307,7 @@ class Corruptor:
         df = pd.read_csv(self.HATEFUL_DATASET / "chinese-SexComment.csv", delimiter=',', encoding='utf-8')
         df = df[["comment_text"]].drop_duplicates()
         dataset = Dataset.from_pandas(df.reset_index(drop=True))
-        dataset = dataset.rename_column("comment_text", self.HATE_COLUMN_NAME)
+        if "comment_text" != self.HATE_COLUMN_NAME : dataset = dataset.rename_column("comment_text", self.HATE_COLUMN_NAME)
         datasets.append(dataset)
 
         self.update_hatespeech_dataset(["zh"], datasets)
@@ -321,7 +321,7 @@ class Corruptor:
         df = pd.read_csv(self.HATEFUL_DATASET / "dutch-hatecheck.csv", delimiter=',', encoding='utf-8')
         df = df[["test_case"]].drop_duplicates()
         dataset = Dataset.from_pandas(df.reset_index(drop=True))
-        dataset = dataset.rename_column("test_case", self.HATE_COLUMN_NAME)
+        if "test_case" != self.HATE_COLUMN_NAME : dataset = dataset.rename_column("test_case", self.HATE_COLUMN_NAME)
         datasets.append(dataset)
 
         self.update_hatespeech_dataset(["nl"], datasets)
@@ -336,92 +336,178 @@ class Corruptor:
         df = df[["text"]].drop_duplicates()
         df.loc[:,"text"] = df.loc[:,"text"].str.replace('1. ', '', regex=True)
         dataset = Dataset.from_pandas(df.reset_index(drop=True))
-        dataset = dataset.rename_column("text", self.HATE_COLUMN_NAME)
+        if "text" != self.HATE_COLUMN_NAME : dataset = dataset.rename_column("text", self.HATE_COLUMN_NAME)
         datasets.append(dataset)
 
         # Hasoc 2019 train
         df = pd.read_csv(self.HATEFUL_DATASET / "english_hasoc2019_train.tsv", delimiter='\t', encoding='utf-8')
         df = df[["text"]].drop_duplicates()
         dataset = Dataset.from_pandas(df.reset_index(drop=True))
-        dataset = dataset.rename_column("text", self.HATE_COLUMN_NAME)
+        if "text" != self.HATE_COLUMN_NAME : dataset = dataset.rename_column("text", self.HATE_COLUMN_NAME)
         datasets.append(dataset)
 
         # Hasoc 2019 test
         df = pd.read_csv(self.HATEFUL_DATASET / "english_hasoc2019_test.tsv", delimiter='\t', encoding='utf-8')
         df = df[["text"]].drop_duplicates()
         dataset = Dataset.from_pandas(df.reset_index(drop=True))
-        dataset = dataset.rename_column("text", self.HATE_COLUMN_NAME)
+        if "text" != self.HATE_COLUMN_NAME : dataset = dataset.rename_column("text", self.HATE_COLUMN_NAME)
         datasets.append(dataset)
 
         # Olid train
         df = pd.read_csv(self.HATEFUL_DATASET / "english_olid_train.tsv", delimiter='\t', encoding='utf-8')
         df = df[["tweet"]].drop_duplicates()
         dataset = Dataset.from_pandas(df.reset_index(drop=True))
-        dataset = dataset.rename_column("tweet", self.HATE_COLUMN_NAME)
+        if "tweet" != self.HATE_COLUMN_NAME : dataset = dataset.rename_column("tweet", self.HATE_COLUMN_NAME)
         datasets.append(dataset)
 
         # Olid test
         df = pd.read_csv(self.HATEFUL_DATASET / "english_olid_text.tsv", delimiter='\t', encoding='utf-8')
         df = df[["tweet"]].drop_duplicates()
         dataset = Dataset.from_pandas(df.reset_index(drop=True))
-        dataset = dataset.rename_column("tweet", self.HATE_COLUMN_NAME)
+        if "tweet" != self.HATE_COLUMN_NAME : dataset = dataset.rename_column("tweet", self.HATE_COLUMN_NAME)
         datasets.append(dataset)
 
         # TBO train
         df = pd.read_excel(self.HATEFUL_DATASET / "english_TBO_train.xlsx")
         df = df[["text"]].drop_duplicates()
         dataset = Dataset.from_pandas(df.reset_index(drop=True))
-        dataset = dataset.rename_column("text", self.HATE_COLUMN_NAME)
+        if "text" != self.HATE_COLUMN_NAME : dataset = dataset.rename_column("text", self.HATE_COLUMN_NAME)
         datasets.append(dataset)
 
         # Dynamic hatespeech set
         df = pd.read_csv(self.HATEFUL_DATASET / "english-dynamic-hate-speech.csv", delimiter=',', encoding='utf-8')
         df = df[["text"]].drop_duplicates()
         dataset = Dataset.from_pandas(df.reset_index(drop=True))
-        dataset = dataset.rename_column("text", self.HATE_COLUMN_NAME)
+        if "text" != self.HATE_COLUMN_NAME : dataset = dataset.rename_column("text", self.HATE_COLUMN_NAME)
         datasets.append(dataset)
 
         # Multitarget CONAN
         df = pd.read_csv(self.HATEFUL_DATASET / "english-Multitarget-CONAN.csv", delimiter=',', encoding='utf-8')
         df = df[["HATE_SPEECH"]].drop_duplicates()
         dataset = Dataset.from_pandas(df.reset_index(drop=True))
-        dataset = dataset.rename_column("HATE_SPEECH", self.HATE_COLUMN_NAME)
+        if "HATE_SPEECH" != self.HATE_COLUMN_NAME : dataset = dataset.rename_column("HATE_SPEECH", self.HATE_COLUMN_NAME)
         datasets.append(dataset)
-
-        # Sexism annotations
-        df = pd.read_csv(self.HATEFUL_DATASET / "dutch-hatecheck.csv", delimiter=',', encoding='utf-8')
-        df = df[["test_case"]].drop_duplicates()
-        dataset = Dataset.from_pandas(df.reset_index(drop=True))
-        dataset = dataset.rename_column("test_case", self.HATE_COLUMN_NAME)
-        datasets.append(dataset)
-
 
         self.update_hatespeech_dataset(["en"], datasets)
 
         return
         
     def load_german_datasets(self) -> None :
+        datasets = []
 
+        # GermEval2018
+        df = pd.read_csv(self.HATEFUL_DATASET / "german_germeval2018_training.txt", delimiter='\t', encoding='utf-8', header=None, names=["sentence", "feature_1", "feature_2"])
+        df = df[["sentence"]].drop_duplicates()
+        dataset = Dataset.from_pandas(df.reset_index(drop=True))
+        if "sentence" != self.HATE_COLUMN_NAME : dataset = dataset.rename_column("sentence", self.HATE_COLUMN_NAME)
+        datasets.append(dataset)
+
+        # HASOC 2019 train
+        df = pd.read_csv(self.HATEFUL_DATASET / "german_hasoc2019_train.tsv", delimiter='\t', encoding='utf-8')
+        df = df[["text"]].drop_duplicates()
+        dataset = Dataset.from_pandas(df.reset_index(drop=True))
+        if "text" != self.HATE_COLUMN_NAME : dataset = dataset.rename_column("text", self.HATE_COLUMN_NAME)
+        datasets.append(dataset)
+
+        # HASOC 2019 test
+        df = pd.read_csv(self.HATEFUL_DATASET / "german_hasoc2019_test.tsv", delimiter='\t', encoding='utf-8')
+        df = df[["text"]].drop_duplicates()
+        dataset = Dataset.from_pandas(df.reset_index(drop=True))
+        if "text" != self.HATE_COLUMN_NAME : dataset = dataset.rename_column("text", self.HATE_COLUMN_NAME)
+        datasets.append(dataset)
+
+        # GAHD
+        df = pd.read_csv(self.HATEFUL_DATASET / "german-gahd.csv", delimiter=',', encoding='utf-8')
+        df = df[["text"]].drop_duplicates()
+        dataset = Dataset.from_pandas(df.reset_index(drop=True))
+        if "text" != self.HATE_COLUMN_NAME : dataset = dataset.rename_column("text", self.HATE_COLUMN_NAME)
+        datasets.append(dataset)
+
+
+        self.update_hatespeech_dataset(["de"], datasets)
         return
         
     def load_hindi_datasets(self) -> None :
-   
+        datasets = []
+
+        # HASOC 2019
+        hasoc_sets = ["hindi_hasoc2019_train.tsv", "hindi_hasoc2019_test.tsv"]
+
+        for file in hasoc_sets :
+            df = pd.read_csv(self.HATEFUL_DATASET / file, delimiter='\t', encoding='utf-8')
+            df = df[["text"]].drop_duplicates()
+            dataset = Dataset.from_pandas(df.reset_index(drop=True))
+            if "text" != self.HATE_COLUMN_NAME : dataset = dataset.rename_column("text", self.HATE_COLUMN_NAME)
+            datasets.append(dataset)
+
+        # Codalab
+        codalab_sets = ["hindi-codalab-train.csv", "hindi-codalab-eval.csv", "hindi-codalab-test.csv"]
+        
+        for file in codalab_sets :
+            df = pd.read_csv(self.HATEFUL_DATASET / file, delimiter=',', encoding='utf-8')
+            df = df[["Post"]].drop_duplicates()
+            dataset = Dataset.from_pandas(df.reset_index(drop=True))
+            if "Post" != self.HATE_COLUMN_NAME : dataset = dataset.rename_column("Post", self.HATE_COLUMN_NAME)
+            datasets.append(dataset)
+
+        self.update_hatespeech_dataset(["hi"], datasets)
         return
         
     def load_indonesian_datasets(self) -> None :
+        datasets = []
 
+        # RE datasets
+        re_sets = ["indonesian_re_dataset_incivility.csv", "indonesian_re_dataset.csv"]
+        
+        for file in re_sets :
+            df = pd.read_csv(self.HATEFUL_DATASET / file, delimiter=',', encoding='utf-8')
+            df = df[["Tweet"]].drop_duplicates()
+            dataset = Dataset.from_pandas(df.reset_index(drop=True))
+            if "Tweet" != self.HATE_COLUMN_NAME : dataset = dataset.rename_column("Tweet", self.HATE_COLUMN_NAME)
+            datasets.append(dataset)
+
+        self.update_hatespeech_dataset(["id"], datasets)
         return
 
     def load_italian_datasets(self) -> None :
+        datasets = []
+
+        # Evalita2020
+        evalita2020 = load_dataset("basilepp19/evalita2020-AH-instr")
+        if isinstance(evalita2020, DatasetDict) :
+            for split in evalita2020.keys() :
+                dataset = evalita2020[split]
+                dataset = dataset.select_columns(["input"])
+                dataset = dataset.rename_column("input", self.HATE_COLUMN_NAME)
+                datasets.append(dataset)
+        
+        self.update_hatespeech_dataset(["it"], datasets)
     
-        return    
+        return
     
     def load_korean_datasets(self) -> None :
+        datasets = []
 
+        # BEEP
+        beep_sets = ["korean_beep_train.tsv", "korean_beep_dev.tsv", "korean_beep_test.tsv"]
+
+        for file in beep_sets :
+            df = pd.read_csv(self.HATEFUL_DATASET / file, delimiter='\t', encoding='utf-8')
+            df = df[["comments"]].drop_duplicates()
+            dataset = Dataset.from_pandas(df.reset_index(drop=True))
+            if "comments" != self.HATE_COLUMN_NAME : dataset = dataset.rename_column("comments", self.HATE_COLUMN_NAME)
+            datasets.append(dataset)
+        
+        self.update_hatespeech_dataset(["ko"], datasets)
         return
     
     def load_latvian_datasets(self) -> None :
+        datasets = []
 
+        # latvian comments
+        latvian_sets = ["lituanien-letton-comments-2014.csv", "lituanien-letton-comments-2015.csv", "lituanien-letton-comments-2016.tsv", "lituanien-letton-comments-2017.tsv", "lituanien-letton-comments-2018.tsv", "lituanien-letton-comments-2019.tsv"]
+
+        self.update_hatespeech_dataset(["lv", "lt"], datasets)
         return
         
     def load_portuguese_datasets(self) -> None :
