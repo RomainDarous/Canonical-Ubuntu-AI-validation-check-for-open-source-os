@@ -20,6 +20,7 @@ class Corruptor:
     ROW_NUMBER = "raws_per_file"
     MERGED_DATASET = Path('./2_os_by_language/datasets')
     HATEFUL_DATASET = Path('./multilingual_hateful_sets/data')
+    HATE_COLUMN_NAME = "sentence"
 
     ACCEPTED_LANGUAGES = [
         "Arabic", "Basque", "Breton", "Catalan", "Chinese_China", "Chinese_Hongkong", 
@@ -213,7 +214,7 @@ class Corruptor:
             offenseval_2020 = load_dataset("strombergnlp/offenseval_2020", config=config)
             if isinstance(offenseval_2020, DatasetDict) :
                 for split in offenseval_2020.keys() :
-                    offenseval_2020[split] = (offenseval_2020[split].select_columns(["text"])).rename_column("text", "sentence")
+                    offenseval_2020[split] = (offenseval_2020[split].select_columns(["text"])).rename_column("text", self.HATE_COLUMN_NAME)
                 self.update_hatespeech_dataset([config], [offenseval_2020[split] for split in offenseval_2020.keys()])
             else : print(f"Error loading OffensEval2020 dataset")
         """
@@ -222,7 +223,7 @@ class Corruptor:
         df = pd.read_csv(self.HATEFUL_DATASET / "italian_french_english_CONAN.csv", delimiter=",", encoding='utf-8')
         df = df[["hateSpeech"]].drop_duplicates()
         dataset = Dataset.from_pandas(df.reset_index(drop=True))
-        dataset = dataset.rename_column("hateSpeech", "sentence")
+        dataset = dataset.rename_column("hateSpeech", self.HATE_COLUMN_NAME)
         self.update_hatespeech_dataset(["it", "en", "fr"], [dataset])
 
         # Russian and Ukrainian dataset
@@ -253,139 +254,194 @@ class Corruptor:
         self.load_urdu_datasets()
     
     def load_albanian_datasets(self) -> None :
+        datasets = []
+
         # Albanian hate speech set
         df = pd.read_csv(self.HATEFUL_DATASET / "albanian_hate_speech.csv", delimiter=';', encoding='utf-8')
         df = df[["text"]].drop_duplicates()
         dataset = Dataset.from_pandas(df.reset_index(drop=True))
-        dataset = dataset.rename_column("text", "sentence")
-        self.update_hatespeech_dataset(["sq"], [dataset])
+        dataset = dataset.rename_column("text", self.HATE_COLUMN_NAME)
+        datasets.append(dataset)
+
+        self.update_hatespeech_dataset(["sq"], datasets)
 
     
     def load_arabic_datasets(self) -> None :
-        dataset = Dataset()
-        if "ar" in self.mult_hate_speech.keys() :
-            self.mult_hate_speech["ar"] = concatenate_datasets([self.mult_hate_speech["ar"], dataset])
-        else :
-            self.mult_hate_speech["ar"] = dataset
+        datasets = []
+
+        # L-HASB dataset
+        df = pd.read_csv(self.HATEFUL_DATASET / "arabic-L-HSAB.txt", delimiter='\t', encoding='utf-8')
+        df = df[["tweet"]].drop_duplicates()
+        dataset = Dataset.from_pandas(df.reset_index(drop=True))
+        dataset = dataset.rename_column("tweet", self.HATE_COLUMN_NAME)
+        datasets.append(dataset)
+
+        # Let-Mi dataset
+        df = pd.read_csv(self.HATEFUL_DATASET / "arabic-Let-Mi.csv", delimiter=',', encoding='utf-8')
+        df = df[["text"]].drop_duplicates()
+        dataset = Dataset.from_pandas(df.reset_index(drop=True))
+        dataset = dataset.rename_column("text", self.HATE_COLUMN_NAME)
+        datasets.append(dataset)
+
+        self.update_hatespeech_dataset(["ar"], datasets)
         return
+    
     def load_bengali_datasets(self) -> None :
-        dataset = Dataset()
-        if "ar" in self.mult_hate_speech.keys() :
-            self.mult_hate_speech["ar"] = concatenate_datasets([self.mult_hate_speech["ar"], dataset])
-        else :
-            self.mult_hate_speech["ar"] = dataset
+        datasets = []
+
+        # Bengali hate speech dataset
+        df = pd.read_csv(self.HATEFUL_DATASET / "bengali_hate_speech.csv", delimiter=',', encoding='utf-8')
+        df = df[["sentence"]].drop_duplicates()
+        dataset = Dataset.from_pandas(df.reset_index(drop=True))
+        dataset = dataset.rename_column("sentence", self.HATE_COLUMN_NAME)
+        datasets.append(dataset)
+
+        self.update_hatespeech_dataset(["bn"], datasets)
+
         return
     
     def load_chinese_datasets(self) -> None :
-        dataset = Dataset()
-        if "ar" in self.mult_hate_speech.keys() :
-            self.mult_hate_speech["ar"] = concatenate_datasets([self.mult_hate_speech["ar"], dataset])
-        else :
-            self.mult_hate_speech["ar"] = dataset
+        datasets = []
+
+        # Chinese Sexist Comments
+        df = pd.read_csv(self.HATEFUL_DATASET / "chinese-SexComment.csv", delimiter=',', encoding='utf-8')
+        df = df[["comment_text"]].drop_duplicates()
+        dataset = Dataset.from_pandas(df.reset_index(drop=True))
+        dataset = dataset.rename_column("comment_text", self.HATE_COLUMN_NAME)
+        datasets.append(dataset)
+
+        self.update_hatespeech_dataset(["zh"], datasets)
+
         return    
     
     def load_dutch_datasets(self) -> None :
-        dataset = Dataset()
-        if "ar" in self.mult_hate_speech.keys() :
-            self.mult_hate_speech["ar"] = concatenate_datasets([self.mult_hate_speech["ar"], dataset])
-        else :
-            self.mult_hate_speech["ar"] = dataset
+        datasets = []
+
+        # Dutch hate check
+        df = pd.read_csv(self.HATEFUL_DATASET / "dutch-hatecheck.csv", delimiter=',', encoding='utf-8')
+        df = df[["test_case"]].drop_duplicates()
+        dataset = Dataset.from_pandas(df.reset_index(drop=True))
+        dataset = dataset.rename_column("test_case", self.HATE_COLUMN_NAME)
+        datasets.append(dataset)
+
+        self.update_hatespeech_dataset(["nl"], datasets)
+
         return
         
     def load_english_datasets(self) -> None :
-        dataset = Dataset()
-        if "ar" in self.mult_hate_speech.keys() :
-            self.mult_hate_speech["ar"] = concatenate_datasets([self.mult_hate_speech["ar"], dataset])
-        else :
-            self.mult_hate_speech["ar"] = dataset
+        datasets = []
+
+        # GAB
+        df = pd.read_csv(self.HATEFUL_DATASET / "english_gab.csv", delimiter=',', encoding='utf-8')
+        df = df[["text"]].drop_duplicates()
+        df.loc[:,"text"] = df.loc[:,"text"].str.replace('1. ', '', regex=True)
+        dataset = Dataset.from_pandas(df.reset_index(drop=True))
+        dataset = dataset.rename_column("text", self.HATE_COLUMN_NAME)
+        datasets.append(dataset)
+
+        # Hasoc 2019 train
+        df = pd.read_csv(self.HATEFUL_DATASET / "english_hasoc2019_train.tsv", delimiter='\t', encoding='utf-8')
+        df = df[["text"]].drop_duplicates()
+        dataset = Dataset.from_pandas(df.reset_index(drop=True))
+        dataset = dataset.rename_column("text", self.HATE_COLUMN_NAME)
+        datasets.append(dataset)
+
+        # Hasoc 2019 test
+        df = pd.read_csv(self.HATEFUL_DATASET / "english_hasoc2019_test.tsv", delimiter='\t', encoding='utf-8')
+        df = df[["text"]].drop_duplicates()
+        dataset = Dataset.from_pandas(df.reset_index(drop=True))
+        dataset = dataset.rename_column("text", self.HATE_COLUMN_NAME)
+        datasets.append(dataset)
+
+        # Olid train
+        df = pd.read_csv(self.HATEFUL_DATASET / "english_olid_train.tsv", delimiter='\t', encoding='utf-8')
+        df = df[["tweet"]].drop_duplicates()
+        dataset = Dataset.from_pandas(df.reset_index(drop=True))
+        dataset = dataset.rename_column("tweet", self.HATE_COLUMN_NAME)
+        datasets.append(dataset)
+
+        # Olid test
+        df = pd.read_csv(self.HATEFUL_DATASET / "english_olid_text.tsv", delimiter='\t', encoding='utf-8')
+        df = df[["tweet"]].drop_duplicates()
+        dataset = Dataset.from_pandas(df.reset_index(drop=True))
+        dataset = dataset.rename_column("tweet", self.HATE_COLUMN_NAME)
+        datasets.append(dataset)
+
+        # TBO train
+        df = pd.read_excel(self.HATEFUL_DATASET / "english_TBO_train.xlsx")
+        df = df[["text"]].drop_duplicates()
+        dataset = Dataset.from_pandas(df.reset_index(drop=True))
+        dataset = dataset.rename_column("text", self.HATE_COLUMN_NAME)
+        datasets.append(dataset)
+
+        # Dynamic hatespeech set
+        df = pd.read_csv(self.HATEFUL_DATASET / "english-dynamic-hate-speech.csv", delimiter=',', encoding='utf-8')
+        df = df[["text"]].drop_duplicates()
+        dataset = Dataset.from_pandas(df.reset_index(drop=True))
+        dataset = dataset.rename_column("text", self.HATE_COLUMN_NAME)
+        datasets.append(dataset)
+
+        # Multitarget CONAN
+        df = pd.read_csv(self.HATEFUL_DATASET / "english-Multitarget-CONAN.csv", delimiter=',', encoding='utf-8')
+        df = df[["HATE_SPEECH"]].drop_duplicates()
+        dataset = Dataset.from_pandas(df.reset_index(drop=True))
+        dataset = dataset.rename_column("HATE_SPEECH", self.HATE_COLUMN_NAME)
+        datasets.append(dataset)
+
+        # Sexism annotations
+        df = pd.read_csv(self.HATEFUL_DATASET / "dutch-hatecheck.csv", delimiter=',', encoding='utf-8')
+        df = df[["test_case"]].drop_duplicates()
+        dataset = Dataset.from_pandas(df.reset_index(drop=True))
+        dataset = dataset.rename_column("test_case", self.HATE_COLUMN_NAME)
+        datasets.append(dataset)
+
+
+        self.update_hatespeech_dataset(["en"], datasets)
+
         return
         
     def load_german_datasets(self) -> None :
-        dataset = Dataset()
-        if "ar" in self.mult_hate_speech.keys() :
-            self.mult_hate_speech["ar"] = concatenate_datasets([self.mult_hate_speech["ar"], dataset])
-        else :
-            self.mult_hate_speech["ar"] = dataset
+
         return
         
     def load_hindi_datasets(self) -> None :
-        dataset = Dataset()
-        if "ar" in self.mult_hate_speech.keys() :
-            self.mult_hate_speech["ar"] = concatenate_datasets([self.mult_hate_speech["ar"], dataset])
-        else :
-            self.mult_hate_speech["ar"] = dataset
+   
         return
         
     def load_indonesian_datasets(self) -> None :
-        dataset = Dataset()
-        if "ar" in self.mult_hate_speech.keys() :
-            self.mult_hate_speech["ar"] = concatenate_datasets([self.mult_hate_speech["ar"], dataset])
-        else :
-            self.mult_hate_speech["ar"] = dataset
+
         return
 
     def load_italian_datasets(self) -> None :
-        dataset = Dataset()
-        if "ar" in self.mult_hate_speech.keys() :
-            self.mult_hate_speech["ar"] = concatenate_datasets([self.mult_hate_speech["ar"], dataset])
-        else :
-            self.mult_hate_speech["ar"] = dataset
+    
         return    
     
     def load_korean_datasets(self) -> None :
-        dataset = Dataset()
-        if "ar" in self.mult_hate_speech.keys() :
-            self.mult_hate_speech["ar"] = concatenate_datasets([self.mult_hate_speech["ar"], dataset])
-        else :
-            self.mult_hate_speech["ar"] = dataset
+
         return
     
     def load_latvian_datasets(self) -> None :
-        dataset = Dataset()
-        if "ar" in self.mult_hate_speech.keys() :
-            self.mult_hate_speech["ar"] = concatenate_datasets([self.mult_hate_speech["ar"], dataset])
-        else :
-            self.mult_hate_speech["ar"] = dataset
+
         return
         
     def load_portuguese_datasets(self) -> None :
-        dataset = Dataset()
-        if "ar" in self.mult_hate_speech.keys() :
-            self.mult_hate_speech["ar"] = concatenate_datasets([self.mult_hate_speech["ar"], dataset])
-        else :
-            self.mult_hate_speech["ar"] = dataset
+
         return    
 
     def load_russian_datasets(self) -> None :
-        dataset = Dataset()
-        if "ar" in self.mult_hate_speech.keys() :
-            self.mult_hate_speech["ar"] = concatenate_datasets([self.mult_hate_speech["ar"], dataset])
-        else :
-            self.mult_hate_speech["ar"] = dataset
+
         return    
 
     def load_spanish_datasets(self) -> None :
-        dataset = Dataset()
-        if "ar" in self.mult_hate_speech.keys() :
-            self.mult_hate_speech["ar"] = concatenate_datasets([self.mult_hate_speech["ar"], dataset])
-        else :
-            self.mult_hate_speech["ar"] = dataset
+
         return    
 
     def load_ukrainian_datasets(self) -> None :
-        dataset = Dataset()
-        if "ar" in self.mult_hate_speech.keys() :
-            self.mult_hate_speech["ar"] = concatenate_datasets([self.mult_hate_speech["ar"], dataset])
-        else :
-            self.mult_hate_speech["ar"] = dataset
+
         return    
 
     def load_urdu_datasets(self) -> None :
-        dataset = Dataset()
-        if "ar" in self.mult_hate_speech.keys() :
-            self.mult_hate_speech["ar"] = concatenate_datasets([self.mult_hate_speech["ar"], dataset])
-        else :
-            self.mult_hate_speech["ar"] = dataset
+
         return
     
     def update_hatespeech_dataset(self, languages: list[str], datasets: list[Dataset]) -> None :
