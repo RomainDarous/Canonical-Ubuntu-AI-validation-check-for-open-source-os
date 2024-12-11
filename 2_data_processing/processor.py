@@ -9,7 +9,7 @@ import numpy as np
 import nltk
 from nltk.corpus import wordnet
 from typing import Dict
-from datasets import Dataset, DatasetDict
+from datasets import Dataset, DatasetDict, concatenate_datasets
 from sentence_transformers import SentenceTransformer
 
 import torch
@@ -37,9 +37,8 @@ class Processor:
     UPDATED_FILES = "updated_files"
     ARCH_VERSIONS = "archive_versions"
     VALID_LANGUAGES = "languages"
-    COLLECTED_DATASET_FOLDER = Path('../1_data_collection/os_by_language/dataset')
+    #COLLECTED_DATASET_FOLDER = Path('../1_data_collection/os_by_language/dataset')
     #COLLECTED_DATASET_FOLDER = Path('./tmp/dataset/')
-
     
     MERGED_DATASET = Path('./2_os_by_language/datasets')
     METADATA_FILE_02 = Path('./2_os_by_language/metadata_02.json')
@@ -47,7 +46,7 @@ class Processor:
     LAST_MERGED_FILE = Path('./2_os_by_language/last_merged_file.txt')
     LAST_CLEANED_FILE = Path('./2_os_by_language/last_cleaned_file.txt')
 
-    #COLLECTED_DATASET_FOLDER = MERGED_DATASET
+    COLLECTED_DATASET_FOLDER = MERGED_DATASET
     #MERGED_DATASET = Path('./tmp/dataset/')
 
     # Translation check-up
@@ -118,7 +117,7 @@ class Processor:
  
                 # Removing empty strings
                 df.replace('', np.nan, inplace=True)
-                df.dropna(subset=["en"], inplace=True)
+                df.dropna(inplace=True)
 
                 # Cleaning function
                 working_df = df.loc[:, :]
@@ -139,7 +138,7 @@ class Processor:
                     os.remove(file)
                     continue
                 else: 
-                    df['label'] = 1 # adding a label column
+                    df['score'] = 1 # adding a label column
                     df.to_csv(file, encoding='utf-8', index=False, sep='\t')
 
             # Deleting the resume file
@@ -215,7 +214,7 @@ class Processor:
                 dataset_dict[code].drop_duplicates(inplace=True)
                 if not dataset_dict[code].empty :
                     dataset_dict[code]['lang'] = code # adding a language rwo for future full merging
-                    dataset_dict[code].rename(columns={dataset_dict[code].columns[0]: 'sentence1', dataset_dict[code].columns[1]: 'sentence2', dataset_dict[code].columns[2]: 'score'}, inplace=True)
+                    dataset_dict[code].rename(columns={dataset_dict[code].columns[0]: 'sentence1', dataset_dict[code].columns[1]: 'sentence2'}, inplace=True)
                     dataset_dict[code].to_csv(self.MERGED_DATASET / f'os-dataset-{code}.csv', index=False, sep='\t')
                     self.metadata_02[self.ROW_NUMBER][str(self.MERGED_DATASET / f'os-dataset-{code}.csv')] = dataset_dict[code].shape[0]
             
@@ -233,12 +232,15 @@ class Processor:
         threshold = 0.1
         resumed = True
 
-        if not self.translation_check_metadata[self.LAST_CHECKED_FILE] : self.reset_translation_metadata()
-        else : resumed = False
+        """if not self.translation_check_metadata[self.LAST_CHECKED_FILE] : self.reset_translation_metadata()
+        else : resumed = False"""
+        resumed = False # TO CHANGE
 
         try :
             # Checking in all files low similarity translations
             for file in self.list_dir :
+                self.translation_check_metadata[self.LAST_CHECKED_FILE] = file
+
                 path = self.MERGED_DATASET / Path(file)
                 print("Current path : ", path)
                 if not resumed and path != self.MERGED_DATASET / Path(self.translation_check_metadata[self.LAST_CHECKED_FILE]) : continue
@@ -255,10 +257,11 @@ class Processor:
                 with open(self.TRANSLATION_CHECK_FILE, 'w', encoding='utf-8') as f :
                     json.dump(self.translation_check_metadata, f, indent=4)
                     print("02_translation_check.json updated !")
-                    print(f"Number of mmismatches found : {len(self.translation_check_metadata[file])}")
+                    print(f"Number of mismatches found : {len(self.translation_check_metadata[file])}")
                 
-                # Resetting last checked file to default
-                self.translation_check_metadata[self.LAST_CHECKED_FILE] = ''
+                
+            # Resetting last checked file to default
+            self.translation_check_metadata[self.LAST_CHECKED_FILE] = ''
 
         except Exception as e :
             print(f"An error occured : {e}")
@@ -269,30 +272,45 @@ class Processor:
                 json.dump(self.translation_check_metadata, f, indent=4)
 
         return
+    
+    def delete_wrong_translations(self) -> None :
+        for file in self.translation_check_metadata.keys() :
+            if file != self.LAST_CHECKED_FILE :
+                df = pd.read_csv(self.MERGED_DATASET / file, encoding='utf-8', delimiter='\t')
+                indices_to_delete = self.translation_check_metadata[file]
+                df.drop(indices_to_delete, inplace=True)
+                df.to_csv(self.MERGED_DATASET / file, encoding='utf-8', index=False, sep='\t')
 
-    def data_upload(self) -> None :
+                # Update its line number
+                self.metadata_02[self.ROW_NUMBER][str(self.MERGED_DATASET / file)] = df.shape[0]
+        
+        with open(self.METADATA_FILE_02, 'w', encoding=('utf-8')) as f :
+            json.dump(self.metadata_02, f, indent=4)
+        return
+
+    def data_upload(self, data_dir) -> None :
         """Once the processing is done, pushes the dataset to HuggingFace
         """
-        files = os.listdir(self.MERGED_DATASET)
+        files = os.listdir(data_dir)
 
-        dataset_subsets = DatasetDict()
+        datasets = []
 
         # Load each file and add it as a subset
         for filename in files:
-            file_path = os.path.join(self.MERGED_DATASET, filename)
+            file_path = os.path.join(data_dir, filename)
             if filename.endswith(".csv"):  # Modify if using another file format
                 df = pd.read_csv(file_path, delimiter='\t')  # Load file into a DataFrame
                 subset = Dataset.from_pandas(df)  # Convert DataFrame to Dataset
-                src, target, label = df.columns
-                df.rename(columns={src: 'sentence1', target: 'sentence2', label: 'score'}, inplace=True)
-                dataset_subsets[f'{src}_{target}'] = subset
+                datasets.append(subset)
+        
+        dataset = concatenate_datasets(datasets)
 
         # Define repository name and upload the dataset
         repo_name = input("Dataset directory: ")
         token=input("Your personal token: ")
 
         # Push the dataset to the Hugging Face Hub
-        dataset_subsets.push_to_hub(repo_name, token=token)
+        dataset.push_to_hub(repo_name, token=token)
 
 
 
@@ -349,7 +367,8 @@ class Processor:
             pd.DataFrame: a cleaned version of the input dataframe
         """
         type_clean = [
-            r'\n(\n)*|\t(\t)*',
+            r'@\w+\s'                               # Remove @"content "
+            r'\n(\n)*|\t(\t)*|\\n(\\n)*',
             r'http\S+|www\S+',                      # Remove URLs
             r'\[UTF-[^\]]+\]',                      # Remove UTF characters
             r'(\()*(%[^)]+)(\))*',                  # Remove (%s) characters
@@ -372,26 +391,35 @@ class Processor:
 
         for column in df.columns:
             # Removing identical pairs
-            if column != 'en':
-                df = df[(df.loc[:,column] != df['en']) & (df.loc[:,column] != column) & (df['en'] != 'en')]
+            if 'en' in df.columns :
+                if column != 'en':
+                    df = df[(df.loc[:,column] != df['en']) & (df.loc[:,column] != column) & (df['en'] != 'en')]
 
-            else :
-                # Checking that the English version contains proper English words
-                df.loc[:,column] = df.loc[:,column].apply(self.is_english)
+                else :
+                    # Checking that the English version contains proper English words
+                    df.loc[:,column] = df.loc[:,column].apply(self.is_english)
             
             # Cleaning all the columns
-            df.loc[:,column] = df.loc[:,column].apply(self.remove_html)
-            df.loc[:,column] = df.loc[:,column].str.replace('|'.join(type_clean), ' ', regex=True)
-            df.loc[:,column] = df.loc[:,column].str.replace('|'.join(char_clean), ' ', regex=True)
+            try : 
+                df.loc[:,column] = df.loc[:,column].apply(self.remove_html)
+                df.loc[:,column] = df.loc[:,column].str.replace('|'.join(type_clean), ' ', regex=True)
+                df.loc[:,column] = df.loc[:,column].str.replace('|'.join(char_clean), ' ', regex=True)
 
-            # Removing excessive spaces
-            df.loc[:,column] = df.loc[:,column].str.replace(r'\t(\t)*', ' ', regex=True)
-            df.loc[:,column] = df.loc[:,column].str.replace(r'\s+', ' ', regex=True).str.strip()
+                # Removing excessive spaces
+                df.loc[:,column] = df.loc[:,column].str.replace(r'\t(\t)*', ' ', regex=True)
+                df.loc[:,column] = df.loc[:,column].str.replace(r'\s+', ' ', regex=True).str.strip()
+            except Exception as e :
+                print(f"Error on column {column} : {e}")
+                print(df.head())
+                continue
         
         # Removing duplicates
         df = (df.drop_duplicates(inplace=False)).loc[:, :]
 
-        return df[df['en'].str.split(' ').str.len() <= 128]
+        if 'en' in df.columns :
+            return df[df['en'].str.split(' ').str.len() <= 128]
+        else :
+            return df
     
     def remove_html(self, sentence: str) -> str:
         """Removes html content from the data.
