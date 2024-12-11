@@ -60,8 +60,13 @@ class Corruptor:
         for file in self.list_dir :
             try :
                 language = (file.split('-')[-1]).split('.')[0]
-                if 'zh' in language :
-                    language = 'zh'
+
+                ### Taking hate sets with close language structures
+                if 'zh' in language : language = 'zh'
+                elif 'ca' in language : language = 'es'
+                elif 'lt' in language : language = 'lv'
+                elif language in ['pl', 'cs', 'be', 'sk']: language = 'uk'
+                elif language in ['sr' 'hr' 'bs', 'bg', 'me' 'sl'] : language = 'ru'
                 df = self.corrupt(self.MERGED_DATASET / file, language, max_row_number)
                 selected_columns = ['sentence1', 'sentence2', 'score', 'lang']
                 df = df[selected_columns]
@@ -582,7 +587,7 @@ class Corruptor:
             if "content" != self.HATE_COLUMN_NAME : dataset = dataset.rename_column("content", self.HATE_COLUMN_NAME)
             datasets.append(dataset)
 
-        self.update_hatespeech_dataset(["lv", "lt"], datasets)
+        self.update_hatespeech_dataset(["lv"], datasets)
         return
         
     def load_portuguese_datasets(self) -> None :

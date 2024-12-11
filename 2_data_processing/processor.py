@@ -239,12 +239,14 @@ class Processor:
         try :
             # Checking in all files low similarity translations
             for file in self.list_dir :
-                self.translation_check_metadata[self.LAST_CHECKED_FILE] = file
-
                 path = self.MERGED_DATASET / Path(file)
                 print("Current path : ", path)
+
+                ### Resuming
                 if not resumed and path != self.MERGED_DATASET / Path(self.translation_check_metadata[self.LAST_CHECKED_FILE]) : continue
                 else : resumed=True
+                self.translation_check_metadata[self.LAST_CHECKED_FILE] = file
+
                 df = pd.read_csv(path, delimiter='\t')
                 sentence1_embedding = model.encode(list(df['sentence1']))
                 sentence2_embedding = model.encode(list(df['sentence2']))
@@ -367,7 +369,7 @@ class Processor:
             pd.DataFrame: a cleaned version of the input dataframe
         """
         type_clean = [
-            r'@\w+\s'                               # Remove @"content "
+            r'@\w+\s*'                               # Remove @"content "
             r'\n(\n)*|\t(\t)*|\\n(\\n)*',
             r'http\S+|www\S+',                      # Remove URLs
             r'\[UTF-[^\]]+\]',                      # Remove UTF characters
