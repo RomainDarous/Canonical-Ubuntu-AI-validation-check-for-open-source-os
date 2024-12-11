@@ -20,10 +20,13 @@ class Corruptor:
     ROW_NUMBER = "raws_per_file"
     #MERGED_DATASET = Path('./2_os_by_language/datasets')
     MERGED_DATASET = Path('./tmp/dataset')
+
     HATEFUL_DATASET = Path('./multilingual_hateful_sets/data')
     PROCESSED_HATEFUL_DATASET = Path('./multilingual_hateful_sets/processed_data')
     HATE_COLUMN_NAME = "sentence"
     HATESET_METADATA = Path('./multilingual_hateful_sets/hatespeech_metadata.json')
+    CLOSE_LANGUAGES = "closest_languages"
+    HATE_LAST_ID = "last_checked_id_per_hate_set"
 
     ACCEPTED_LANGUAGES = [
         "Arabic", "Basque", "Breton", "Catalan", "Chinese_China", "Chinese_Hongkong", 
@@ -56,30 +59,34 @@ class Corruptor:
 
         # Getting the max number of rows
         max_row_number = max(self.metadata_02[self.ROW_NUMBER].values())
+        try : 
+            for file in self.list_dir :
+                try :
+                    language = (file.split('-')[-1]).split('.')[0]
 
-        for file in self.list_dir :
-            try :
-                language = (file.split('-')[-1]).split('.')[0]
+                    ### Taking hate sets with close language structures
+                    hate_languages = self.hateset_metadata[self.CLOSE_LANGUAGES][language]
+                    df = self.corrupt(self.MERGED_DATASET / file, hate_languages, max_row_number)
+                    print("passed2")
+                    df.to_csv(self.MERGED_DATASET / file, encoding='utf-8', index=False, sep='\t')
 
-                ### Taking hate sets with close language structures
-                if 'zh' in language : language = 'zh'
-                elif 'ca' in language : language = 'es'
-                elif 'lt' in language : language = 'lv'
-                elif language in ['pl', 'cs', 'be', 'sk']: language = 'uk'
-                elif language in ['sr' 'hr' 'bs', 'bg', 'me' 'sl'] : language = 'ru'
-                df = self.corrupt(self.MERGED_DATASET / file, language, max_row_number)
-                selected_columns = ['sentence1', 'sentence2', 'score', 'lang']
-                df = df[selected_columns]
-                df.to_csv(self.MERGED_DATASET / file, encoding='utf-8', index=False, sep='\t')
-            except Exception as e :
-                print(f"Error with file {file} : {e}")
-            
-        with open(self.HATESET_METADATA, 'w', encoding='utf-8') as f:
-            json.dump(self.hateset_metadata, f, indent=4)
-        print("DATA SUCCESSFULLY CORRUPTED !")
+                    self.metadata_02[self.CORRUPTED_FILES].append(file)
+                except Exception as e :
+                    print(f"Error with file {file} : {e}")
+            print("DATA SUCCESSFULLY CORRUPTED !")
+
+        except Exception as e : 
+            print(f"Error code : {e}")
+
+        finally :
+            with open(self.HATESET_METADATA, 'w', encoding='utf-8') as f:
+                json.dump(self.hateset_metadata, f, indent=4)
+
+            with open(self.METADATA_FILE_02, 'w', encoding='utf-8') as f :
+                json.dump(self.metadata_02, f, indent=4)
         return
 
-    def corrupt(self, file: Path, language: str, max_row_number: int) -> DataFrame :
+    def corrupt(self, file: Path, hate_languages: list[str], max_row_number: int) -> DataFrame :
         print(f"Corrupting : {file}...")
         # Loading the dataset
         df = pd.read_csv(file, encoding='utf-8', delimiter='\t')
@@ -88,32 +95,18 @@ class Corruptor:
         # Dataset features
         nb_0_labels = np.sum(df['score'] == 0)
         nb_1_labels = np.sum(df['score'] == 1)
-        init_row_number = df.shape[0]
-        row_number = df.shape[0]
-        curr_idx = 0
+        init_os_set_len = df.shape[0]
+        os_set_len = df.shape[0]
+        curr_os_set_idx = 0
 
 
         # Loading the hate set
-        hate_df = pd.DataFrame()
-        has_desired_language = False
-        en_hate_file = ''
-        for hate_file in os.listdir(self.PROCESSED_HATEFUL_DATASET) :
-            code = (hate_file.split('_')[-1]).split('.')[0]
-            if language == code : 
-                hate_df = pd.read_csv(self.PROCESSED_HATEFUL_DATASET / hate_file, sep='\t', encoding='utf-8')
-                has_desired_language = True
-                break
-            elif code == 'en' :
-                en_hate_file = hate_file
-
-        if not has_desired_language : 
-            print(f"Error loading the hate set in {language}, loading the english hate set")
-            language = 'en'
-            hate_df = pd.read_csv(self.PROCESSED_HATEFUL_DATASET / en_hate_file, sep='\t', encoding='utf-8')
-
-        if language in self.hateset_metadata : curr_hate_idx = self.hateset_metadata[language]
-        else : curr_hate_idx = 0
-        row_hate_number = len(hate_df)
+        curr_hate_language_idx = 0
+        hate_df = pd.read_csv(self.PROCESSED_HATEFUL_DATASET / f"hatefulspeech_{hate_languages[0]}.csv", sep='\t', encoding='utf-8')
+        
+        if hate_languages[0] in self.hateset_metadata[self.HATE_LAST_ID] : curr_hate_set_idx = self.hateset_metadata[self.HATE_LAST_ID][hate_languages[0]]
+        else : curr_hate_set_idx = 0
+        len_hate_set = len(hate_df)
 
 
         # The potential additional corrupted rows to add
@@ -123,13 +116,25 @@ class Corruptor:
 
 
         steps = 0
-        while nb_0_labels < int(2*nb_1_labels/3) and steps < row_hate_number :
+        init_idx_corrupted = []
+        while nb_0_labels < int(2*nb_1_labels/3) :
+            # Switching to a new hate set if required
+            if steps == len_hate_set :
+                curr_hate_language_idx += 1
+                if curr_hate_language_idx > len(hate_languages) : break
+                hate_df = pd.read_csv(self.PROCESSED_HATEFUL_DATASET / f"hatefulspeech_{hate_languages[curr_hate_language_idx]}.csv", sep='\t', encoding='utf-8')
+                if hate_languages[0] in self.hateset_metadata[self.HATE_LAST_ID] : curr_hate_set_idx = self.hateset_metadata[self.HATE_LAST_ID][hate_languages[0]]
+                else : curr_hate_set_idx = 0
+                len_hate_set = len(hate_df)
+                steps = 0
+
+
             # Incorporate hatespeech translations
-            sentence1 = str(df.loc[curr_idx, 'sentence1'])
-            sentence2 = str(df.loc[curr_idx, 'sentence2'])
+            sentence1 = str(df.loc[curr_os_set_idx, 'sentence1'])
+            sentence2 = str(df.loc[curr_os_set_idx, 'sentence2'])
             corrupted_sentence2 = sentence2
 
-            hate_speech = hate_df['sentence'][curr_hate_idx]
+            hate_speech = hate_df['sentence'][curr_hate_set_idx]
 
             hate_speech_list = hate_speech.split(' ')
             sentence2_list = sentence2.split(' ')
@@ -140,52 +145,61 @@ class Corruptor:
                 start_idx = np.random.randint(0, len(sentence2_list) - len(hate_speech_list))
                 corrupted_sentence2 = ' '.join(sentence2_list[:start_idx]) + ' ' + hate_speech.lower() + ' ' + ' '.join(sentence2_list[start_idx + len(hate_speech):])
 
-            if row_number < max_row_number :
+            if os_set_len < max_row_number :
                 new_rows['sentence1'].append(sentence1)
                 new_rows['sentence2'].append(corrupted_sentence2)
-                new_rows['score'].append(0)
-                row_number += 1
+                new_rows['score'].append(int(0))
+                os_set_len += 1
             
             else :
-                df.loc[curr_idx, 'sentence2'] = corrupted_sentence2
-                df.loc[curr_idx, 'score'] = 0
+                df.loc[curr_os_set_idx, 'sentence2'] = corrupted_sentence2
+                df.loc[curr_os_set_idx, 'score'] = int(0)
                 nb_1_labels -= 1
+                init_idx_corrupted.append(curr_os_set_idx)
 
             nb_0_labels += 1
             
-            curr_idx = (curr_idx + 1) % row_number
-            curr_hate_idx = (curr_hate_idx + 1) % row_hate_number
+            curr_os_set_idx = (curr_os_set_idx + 1) % os_set_len
+            curr_hate_set_idx = (curr_hate_set_idx + 1) % len_hate_set
             steps += 1
         
-        self.hateset_metadata[language] = curr_hate_idx
+        self.hateset_metadata[self.HATE_LAST_ID][hate_languages[0]] = curr_hate_set_idx
+        new_rows_df = pd.DataFrame(new_rows)
+        df = pd.concat([df, new_rows_df], ignore_index=True)
         # --------------------------------------------------------------------------------
-        steps = 0
-        while nb_0_labels < nb_1_labels and steps < row_hate_number :
+        # The potential additional corrupted rows to add
+        new_rows = {'sentence1' : [],
+                    'sentence2' : [],
+                    'score' : []}
+
+        while nb_0_labels < nb_1_labels :
+            print(nb_0_labels, nb_1_labels)
             # Adding wrong translations
-            sentence1 = str(df.loc[curr_idx, 'sentence1'])
-            random_index = np.random.randint(init_row_number)
-            while random_index == curr_idx : random_index = np.random.randint(init_row_number)
+            sentence1 = str(df.loc[curr_os_set_idx, 'sentence1'])
+            random_index = np.random.choice([i for i in range(init_os_set_len) if i not in init_idx_corrupted and i != curr_os_set_idx])
+            while random_index == curr_os_set_idx : 
+                print("loop")
+                random_index = np.random.randint([i for i in range(init_os_set_len) if i not in init_idx_corrupted and i != curr_os_set_idx])
             corrupted_sentence2 = str(df.loc[random_index, 'sentence2'])
 
-            if row_number < max_row_number :
+            if os_set_len < max_row_number :
                 new_rows['sentence1'].append(sentence1)
                 new_rows['sentence2'].append(corrupted_sentence2)
-                new_rows['score'].append(0)
-                row_number += 1
+                new_rows['score'].append(int(0))
+                os_set_len += 1
             
             else :
-                df.loc[curr_idx, 'sentence2'] = corrupted_sentence2
-                df.loc[curr_idx, 'score'] = 0
+                df.loc[curr_os_set_idx, 'sentence2'] = corrupted_sentence2
+                df.loc[curr_os_set_idx, 'score'] = int(0)
                 nb_1_labels -= 1
 
             nb_0_labels += 1
-            curr_idx = (curr_idx + 1) % row_number
-            steps += 1
+            curr_os_set_idx = (curr_os_set_idx + 1) % os_set_len
     
         
         new_rows_df = pd.DataFrame(new_rows)
-        
         df = pd.concat([df, new_rows_df], ignore_index=True)
+        
         return df
 
 
@@ -206,7 +220,7 @@ class Corruptor:
             working_df = (self.mult_hate_speech[key]).to_pandas()
             if isinstance(working_df, pd.DataFrame) :
                 cleaned_working_df = processor.cleaning(working_df)
-                
+                cleaned_working_df[self.HATE_COLUMN_NAME] = cleaned_working_df[self.HATE_COLUMN_NAME].str.replace(r'\buser\b', '', case=False, regex=True)
                 # Final replacement
                 df = cleaned_working_df.loc[:, :]
                 df.replace('', np.nan, inplace=True)
@@ -226,16 +240,38 @@ class Corruptor:
 
         print("DATASETS LOADED AND SAVED !")
         return
+    
+    def clean_hateful_speech(self) -> None :
+        hateful_sets = os.listdir(self.PROCESSED_HATEFUL_DATASET)
+        for file in hateful_sets :
+            print(f"File being cleaned : {file}")
+            processor = Processor()
+            working_df = pd.read_csv(self.PROCESSED_HATEFUL_DATASET / file, encoding='utf-8', sep='\t')
 
-    # From https://huggingface.co/Mike0307/multilingual-e5-language-detection
+            cleaned_working_df = processor.cleaning(working_df)
+            cleaned_working_df[self.HATE_COLUMN_NAME] = cleaned_working_df[self.HATE_COLUMN_NAME].str.replace(r'\buser\b', '', case=False, regex=True)
+            # Final replacement
+            df = cleaned_working_df.loc[:, :]
+            df.replace('', np.nan, inplace=True)
+            df.dropna(inplace=True)
 
+            # Saving the file
+            self.PROCESSED_HATEFUL_DATASET.mkdir(parents=True, exist_ok=True)
+            df.to_csv(self.PROCESSED_HATEFUL_DATASET / file, sep = '\t', encoding='utf-8', index=False)
 
+        return
     
     # ------------ METADATA FUNCTIONS ------------------- #
     def reset_corrupted_files(self) -> None :
         self.metadata_02[self.CORRUPTED_FILES] = []
         with open(self.METADATA_FILE_02, "w", encoding='utf-8') as f :
             json.dump(self.metadata_02, f, indent=4)
+    
+    def reset_last_checked_id_per_hate_set(self) -> None :
+        for key in self.hateset_metadata[self.HATE_LAST_ID].keys() :
+            self.hateset_metadata[self.HATE_LAST_ID][key] = 0
+        with open(self.HATESET_METADATA, 'w', encoding='utf-8') as f :
+            json.dump(self.hateset_metadata, f, indent=4)
 
 
 

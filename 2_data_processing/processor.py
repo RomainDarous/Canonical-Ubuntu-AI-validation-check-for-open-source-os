@@ -213,7 +213,7 @@ class Processor:
             for code in dataset_dict :
                 dataset_dict[code].drop_duplicates(inplace=True)
                 if not dataset_dict[code].empty :
-                    dataset_dict[code]['lang'] = code # adding a language rwo for future full merging
+                    dataset_dict[code]['sentence2_language'] = code # adding a language rwo for future full merging
                     dataset_dict[code].rename(columns={dataset_dict[code].columns[0]: 'sentence1', dataset_dict[code].columns[1]: 'sentence2'}, inplace=True)
                     dataset_dict[code].to_csv(self.MERGED_DATASET / f'os-dataset-{code}.csv', index=False, sep='\t')
                     self.metadata_02[self.ROW_NUMBER][str(self.MERGED_DATASET / f'os-dataset-{code}.csv')] = dataset_dict[code].shape[0]
@@ -290,14 +290,15 @@ class Processor:
             json.dump(self.metadata_02, f, indent=4)
         return
 
-    def data_upload(self, data_dir) -> None :
+    @staticmethod
+    def data_upload(data_dir: Path) -> None :
         """Once the processing is done, pushes the dataset to HuggingFace
         """
         files = os.listdir(data_dir)
 
         datasets = []
 
-        # Load each file and add it as a subset
+        # Load each file and concatenate them
         for filename in files:
             file_path = os.path.join(data_dir, filename)
             if filename.endswith(".csv"):  # Modify if using another file format
@@ -309,10 +310,9 @@ class Processor:
 
         # Define repository name and upload the dataset
         repo_name = input("Dataset directory: ")
-        token=input("Your personal token: ")
 
         # Push the dataset to the Hugging Face Hub
-        dataset.push_to_hub(repo_name, token=token)
+        dataset.push_to_hub(repo_name)
 
 
 
@@ -369,8 +369,8 @@ class Processor:
             pd.DataFrame: a cleaned version of the input dataframe
         """
         type_clean = [
-            r'@\w+\s*'                               # Remove @"content "
-            r'\n(\n)*|\t(\t)*|\\n(\\n)*',
+            r'@\w+',                                # Remove @"content "
+            r'\n+|\t+|\\n+',
             r'http\S+|www\S+',                      # Remove URLs
             r'\[UTF-[^\]]+\]',                      # Remove UTF characters
             r'(\()*(%[^)]+)(\))*',                  # Remove (%s) characters
@@ -421,6 +421,8 @@ class Processor:
         if 'en' in df.columns :
             return df[df['en'].str.split(' ').str.len() <= 128]
         else :
+            df.replace('', np.nan, inplace=True)
+            df.dropna(inplace=True)
             return df
     
     def remove_html(self, sentence: str) -> str:
