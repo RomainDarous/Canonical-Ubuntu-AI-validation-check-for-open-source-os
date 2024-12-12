@@ -19,8 +19,9 @@ class Corruptor:
     METADATA_FILE_02 = Path('./2_os_by_language/metadata_02.json')
     CORRUPTED_FILES = "corrupted_files"
     ROW_NUMBER = "raws_per_file"
-    #MERGED_DATASET = Path('./2_os_by_language/datasets')
-    MERGED_DATASET = Path('./tmp/dataset')
+    MERGED_DATASET = Path('./2_os_by_language/datasets')
+    
+    #MERGED_DATASET = Path('./tmp/dataset')
 
     HATEFUL_DATASET = Path('./multilingual_hateful_sets/data')
     PROCESSED_HATEFUL_DATASET = Path('./multilingual_hateful_sets/processed_data')
@@ -147,12 +148,15 @@ class Corruptor:
                 start_idx = np.random.randint(0, len(sentence2_list) - len(hate_speech_list))
                 corrupted_sentence2 = ' '.join(sentence2_list[:start_idx]) + ' ' + hate_speech.lower() + ' ' + ' '.join(sentence2_list[start_idx + len(hate_speech):])
 
-            if os_set_len < max_row_number :
+            if os_set_len < min(max_row_number, 2*init_os_set_len) :
                 new_rows['sentence1'].append(sentence1)
                 new_rows['sentence2'].append(corrupted_sentence2)
                 new_rows['score'].append(int(0))
                 new_rows['sentence2_language'].append(df.loc[curr_os_set_idx, 'sentence2_language'])
+                
                 os_set_len += 1
+                nb_0_labels += 1
+
             
             elif df.loc[curr_os_set_idx, 'score'] == 1 :
                     df.loc[curr_os_set_idx, 'sentence2'] = corrupted_sentence2
@@ -161,7 +165,6 @@ class Corruptor:
                     nb_0_labels += 1
                     init_idx_corrupted.append(curr_os_set_idx)
 
-            nb_0_labels += 1
             
             curr_os_set_idx = (curr_os_set_idx + 1) % init_os_set_len
             while curr_os_set_idx in init_idx_corrupted : curr_os_set_idx = (curr_os_set_idx + 1) % init_os_set_len
@@ -172,7 +175,7 @@ class Corruptor:
         # --------------------------------------------------------------------------------
         # The potential additional corrupted rows to add
         valid_indexes = [i for i in range(init_os_set_len) if i not in init_idx_corrupted]
-        steps = 1
+
         while nb_0_labels < nb_1_labels :
             # Adding wrong translations
             sentence1 = str(df.loc[curr_os_set_idx, 'sentence1'])
@@ -180,12 +183,13 @@ class Corruptor:
             while random_index == curr_os_set_idx : random_index = np.random.choice(valid_indexes)
             corrupted_sentence2 = str(df.loc[random_index, 'sentence2'])
 
-            if os_set_len < max_row_number :
+            if os_set_len < min(max_row_number, 2*init_os_set_len) :
                 new_rows['sentence1'].append(sentence1)
                 new_rows['sentence2'].append(corrupted_sentence2)
                 new_rows['score'].append(int(0))
                 new_rows['sentence2_language'].append(df.loc[curr_os_set_idx, 'sentence2_language'])
                 os_set_len += 1
+                nb_0_labels += 1
             
             elif df.loc[curr_os_set_idx, 'score'] == 1 :
                     df.loc[curr_os_set_idx, 'sentence2'] = corrupted_sentence2
