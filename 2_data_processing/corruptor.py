@@ -123,10 +123,13 @@ class Corruptor:
         while nb_0_labels < int(2*nb_1_labels/3) :
             # Switching to a new hate set if required
             if steps == len_hate_set :
+                self.hateset_metadata[self.HATE_LAST_ID][hate_languages[curr_hate_language_idx]] = 0
                 curr_hate_language_idx += 1
+
                 if curr_hate_language_idx > len(hate_languages) : break
                 hate_df = pd.read_csv(self.PROCESSED_HATEFUL_DATASET / f"hatefulspeech_{hate_languages[curr_hate_language_idx]}.csv", sep='\t', encoding='utf-8')
-                if hate_languages[0] in self.hateset_metadata[self.HATE_LAST_ID] : curr_hate_set_idx = self.hateset_metadata[self.HATE_LAST_ID][hate_languages[0]]
+                if hate_languages[curr_hate_language_idx] in self.hateset_metadata[self.HATE_LAST_ID] : 
+                    curr_hate_set_idx = self.hateset_metadata[self.HATE_LAST_ID][hate_languages[curr_hate_language_idx]]
                 else : curr_hate_set_idx = 0
                 len_hate_set = len(hate_df)
                 steps = 0
@@ -136,7 +139,7 @@ class Corruptor:
             sentence1 = str(df.loc[curr_os_set_idx, 'sentence1'])
             sentence2 = str(df.loc[curr_os_set_idx, 'sentence2'])
             corrupted_sentence2 = sentence2
-
+            
             hate_speech = hate_df['sentence'][curr_hate_set_idx]
 
             hate_speech_list = hate_speech.split(' ')
@@ -171,7 +174,7 @@ class Corruptor:
             curr_hate_set_idx = (curr_hate_set_idx + 1) % len_hate_set
             steps += 1
         
-        self.hateset_metadata[self.HATE_LAST_ID][hate_languages[0]] = curr_hate_set_idx
+        self.hateset_metadata[self.HATE_LAST_ID][hate_languages[curr_hate_language_idx]] = curr_hate_set_idx
         # --------------------------------------------------------------------------------
         # The potential additional corrupted rows to add
         valid_indexes = [i for i in range(init_os_set_len) if i not in init_idx_corrupted]
