@@ -261,7 +261,6 @@ class Processor:
                     print("02_translation_check.json updated !")
                     print(f"Number of mismatches found : {len(self.translation_check_metadata[file])}")
                 
-                
             # Resetting last checked file to default
             self.translation_check_metadata[self.LAST_CHECKED_FILE] = ''
 
@@ -272,7 +271,6 @@ class Processor:
             # Saving the potential mistranslated strings in a file to manually check
             with open(self.TRANSLATION_CHECK_FILE, 'w', encoding='utf-8') as f:
                 json.dump(self.translation_check_metadata, f, indent=4)
-
         return
     
     def delete_wrong_translations(self) -> None :
@@ -303,6 +301,7 @@ class Processor:
             file_path = os.path.join(data_dir, filename)
             if filename.endswith(".csv"):  # Modify if using another file format
                 df = pd.read_csv(file_path, delimiter='\t')  # Load file into a DataFrame
+                df["score"] = df['score'] = df['score'].astype('int64')
                 subset = Dataset.from_pandas(df)  # Convert DataFrame to Dataset
                 datasets.append(subset)
         

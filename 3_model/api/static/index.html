@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Mistranslation tool detection</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        background-color: #f5f5f5;
+        }
+
+        .page { display: none; }
+        .active { display: block; }
+
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .input-group {
+            margin-bottom: 15px;
+            width: 100%;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            display: none;
+        }
+        .loading {
+            display: inline-block;
+            margin-left: 10px;
+        }
+        .error {
+            background-color: #ffe6e6;
+            color: #dc3545;
+        }
+        .success {
+            background-color: #e6ffe6;
+            color: #28a745;
+        }
+
+        .large-input {
+            width: 100%;
+        }
+
+            /* Similarity score color classes */
+    .similarity-90-100 {
+        background-color: #1a9850;
+        color: white;
+    }
+    .similarity-80-90 {
+        background-color: #91cf60;
+        color: black;
+    }
+    .similarity-70-80 {
+        background-color: #d9ef8b;
+        color: black;
+    }
+    .similarity-60-70 {
+        background-color: #fee08b;
+        color: black;
+    }
+    .similarity-50-60 {
+        background-color: #fc8d59;
+        color: black;
+    }
+    .similarity-0-50 {
+        background-color: #d73027;
+        color: white;
+    }
+
+    /* Add hover effect to show exact score */
+    .results-row:hover {
+        filter: brightness(0.95);
+    }
+
+    /* Style for the legend */
+    .similarity-legend {
+        margin-top: 20px;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+    }
+
+    .legend-item {
+        display: inline-block;
+        padding: 2px 8px;
+        margin: 2px;
+        border-radius: 3px;
+    }
+    </style>
+</head>
+<body>
+    <div id="home" class="container page active">
+        <h1>Mistranslation detector</h1>
+        <p>An AI based tool to detect mistranslations in your files.</p>
+        <nav>
+            <button onclick="showPage('single_request')">Single Request</button>
+            <button onclick="showPage('file_request')">Import a file</button>
+        </nav>
+    </div>
+
+    <div id="single_request" class="container page">
+        <h1>Mistranslation detector</h1>
+        <div class="input-group">
+            <label for="sentence1">First Sentence:</label>
+            <input type="text" id="sentence1" placeholder="Enter the first sentence", class = "large-input">
+        </div>
+
+        <div class="input-group">
+            <label for="sentence2">Second Sentence:</label>
+            <input type="text" id="sentence2" placeholder="Enter the second sentence", class = "large-input">
+        </div>
+
+        <span id="loading" class="loading" style="display: none;">Processing...</span>
+
+        <div id="result"></div>
+
+        <nav>
+            <button id="checkSimilarity" onclick="checkSimilarity()">Check Similarity</button>
+            <button onclick="showPage('file_request')">Import a file</button>
+        </nav>
+    </div>
+
+    <div id="file_request" class="container page">
+        <h1>Import a file</h1>
+        <p>Upload a CSV file containing pairs of sentences to check for mistranslations.</p>
+        
+        <div class="input-group">
+            <label for="csvFile">Select CSV file:</label>
+            <input type="file" id="csvFile" accept=".csv" class="large-input">
+        </div>
+    
+        <p class="help-text">The CSV should have two columns</p>
+    
+        <span id="file-loading" class="loading" style="display: none;">Processing file...</span>
+        
+        <div id="file-result" style="margin-top: 20px;">
+            <div id="progress-info" style="display: none;"></div>
+            <div id="results-table" style="margin-top: 15px;"></div>
+        </div>
+    
+        <nav>
+            <button id="uploadButton" onclick="fileUpload()">Process File</button>
+            <button onclick="showPage('single_request')">Single Request</button>
+        </nav>
+    </div>
+    <script>
+        // Define functions in global scope
+        let showPage;
+        let checkSimilarity;
+        let fileUpload;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            showPage = function(pageId) {
+                document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
+                document.getElementById(pageId).classList.add('active');
+            };
+
+            function showResult(message, type) {
+                const result = document.getElementById('result');
+                result.textContent = message;
+                result.className = type;
+                result.style.display = 'block';
+            }
+
+            function getSimilarityClass(score) {
+                if (score >= 90) return 'similarity-90-100';
+                if (score >= 80) return 'similarity-80-90';
+                if (score >= 70) return 'similarity-70-80';
+                if (score >= 60) return 'similarity-60-70';
+                if (score >= 50) return 'similarity-50-60';
+                return 'similarity-0-50';
+            }
+
+            function createLegend() {
+                return `
+                    <div class="similarity-legend">
+                        <h4>Similarity Score Legend:</h4>
+                        <div class="legend-item similarity-90-100">90-100% (Excellent)</div>
+                        <div class="legend-item similarity-80-90">80-89% (Very Good)</div>
+                        <div class="legend-item similarity-70-80">70-79% (Good)</div>
+                        <div class="legend-item similarity-60-70">60-69% (Fair)</div>
+                        <div class="legend-item similarity-50-60">50-59% (Poor)</div>
+                        <div class="legend-item similarity-0-50">&lt;50% (Very Poor)</div>
+                    </div>
+                `;
+            }
+
+            function calculateSummaryStats(results) {
+                const scores = results.map(r => r.similarity_score * 100);
+                const average = scores.reduce((a, b) => a + b, 0) / scores.length;
+                const belowThreshold = scores.filter(score => score < 70).length;
+                
+                return {
+                    average,
+                    belowThreshold
+                };
+            }
+
+            fileUpload = async function() {
+                const fileInput = document.getElementById('csvFile');
+                const button = document.getElementById('uploadButton');
+                const loading = document.getElementById('file-loading');
+                const progressInfo = document.getElementById('progress-info');
+                const resultsTable = document.getElementById('results-table');
+
+                if (!fileInput.files.length) {
+                    alert('Please select a file first.');
+                    return;
+                }
+
+                const file = fileInput.files[0];
+                const formData = new FormData();
+                formData.append('file', file);
+
+                button.disabled = true;
+                loading.style.display = 'inline-block';
+                progressInfo.style.display = 'block';
+                progressInfo.textContent = 'Uploading file...';
+                resultsTable.innerHTML = '';
+
+                try {
+                    const response = await fetch('http://localhost:8000/process-file', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Upload failed');
+                    }
+
+                    const data = await response.json();
+                    
+                    // Add legend first
+                    resultsTable.innerHTML = createLegend();
+                    
+                    // Create results table
+                    let tableHTML = `
+                        <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+                            <thead>
+                                <tr>
+                                    <th style="border: 1px solid #ddd; padding: 8px; background-color: #f8f9fa;">Source Text</th>
+                                    <th style="border: 1px solid #ddd; padding: 8px; background-color: #f8f9fa;">Translated Text</th>
+                                    <th style="border: 1px solid #ddd; padding: 8px; background-color: #f8f9fa;">Similarity Score</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    `;
+
+                    data.results.forEach(result => {
+                        const score = (result.similarity_score * 100).toFixed(2);
+                        const similarityClass = getSimilarityClass(parseFloat(score));
+                        tableHTML += `
+                            <tr class="results-row ${similarityClass}">
+                                <td style="border: 1px solid #ddd; padding: 8px;">${result.source_text}</td>
+                                <td style="border: 1px solid #ddd; padding: 8px;">${result.translated_text}</td>
+                                <td style="border: 1px solid #ddd; padding: 8px;">${score}%</td>
+                            </tr>
+                        `;
+                    });
+
+                    tableHTML += '</tbody></table>';
+                    resultsTable.innerHTML += tableHTML;
+
+                    // Add summary statistics
+                    const summaryStats = calculateSummaryStats(data.results);
+                    progressInfo.innerHTML = `
+                        Processed ${data.results.length} pairs<br>
+                        Average similarity: ${summaryStats.average.toFixed(2)}%<br>
+                        Below 70%: ${summaryStats.belowThreshold} pairs
+                    `;
+                } catch (error) {
+                    progressInfo.textContent = 'Error processing file. Please try again.';
+                    console.error('Error:', error);
+                } finally {
+                    button.disabled = false;
+                    loading.style.display = 'none';
+                }
+            };
+
+            checkSimilarity = async function() {
+                const sentence1 = document.getElementById('sentence1').value.trim();
+                const sentence2 = document.getElementById('sentence2').value.trim();
+                const button = document.getElementById('checkSimilarity');
+                const loading = document.getElementById('loading');
+                const result = document.getElementById('result');
+
+                // Validate inputs
+                if (!sentence1 || !sentence2) {
+                    showResult('Please enter both sentences.', 'error');
+                    return;
+                }
+
+                // Disable button and show loading
+                button.disabled = true;
+                loading.style.display = 'inline-block';
+                result.style.display = 'none';
+
+                try {
+                    const response = await fetch('http://localhost:8000/similarity', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            sentence1: sentence1,
+                            sentence2: sentence2
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+
+                    const data = await response.json();
+                    const score = (data.similarity_score * 100).toFixed(2);
+                    if (score > 75) {
+                        showResult(`Similarity Score: ${score}%`, 'success');
+                    }
+                    else {
+                        showResult(`Similarity Score: ${score}%`, 'error');
+                    }
+                } catch (error) {
+                    showResult('Error calculating similarity. Please try again.', 'error');
+                    console.error('Error:', error);
+                } finally {
+                    // Re-enable button and hide loading
+                    button.disabled = false;
+                    loading.style.display = 'none';
+                }
+            };
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,3 @@
+Spanish, French, German, Japanese, Russian, Indonesian, Portuguese, Chinese, Polish, Czeh, Dutch, Hungarian, Bosnian, Turkish, Catalan, Danish, 
+Korean, Finnish, Galician, Romanian, Serbian, Lithuanian, Vietnamese, Slovenian, Slovak, Greek, Croatian, Swedish, Norwegian, Afrikaans, Malay, Bulgarian, Occitan, Basque, Punjabi, Hebrew, Belarusian, Latvian, Estonian, Arabic, Esperanto, Marathi, Thai, Hindi, Asturian, Serbian, Persian, Khmer, 
+Georgian, Tamil, Valencian, Gujarati, Burmese, Icelandic, Bengali, Albanian, Uyghur.
