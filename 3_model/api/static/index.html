@@ -87,11 +87,11 @@
         color: black;
     }
     .similarity-70-80 {
-        background-color: #d9ef8b;
+        background-color: #fee08b;
         color: black;
     }
     .similarity-60-70 {
-        background-color: #fee08b;
+        background-color: #fcaa59;
         color: black;
     }
     .similarity-50-60 {
@@ -185,6 +185,9 @@
         let checkSimilarity;
         let fileUpload;
 
+        // Define base API URL
+        const API_BASE_URL = 'http://localhost:8000'; // Change this based on your environment
+
         document.addEventListener('DOMContentLoaded', function() {
             showPage = function(pageId) {
                 document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
@@ -232,6 +235,7 @@
                 };
             }
 
+            // Define fileUpload in the proper scope
             fileUpload = async function() {
                 const fileInput = document.getElementById('csvFile');
                 const button = document.getElementById('uploadButton');
@@ -245,74 +249,97 @@
                 }
 
                 const file = fileInput.files[0];
-                const formData = new FormData();
-                formData.append('file', file);
+                const reader = new FileReader();
 
-                button.disabled = true;
-                loading.style.display = 'inline-block';
-                progressInfo.style.display = 'block';
-                progressInfo.textContent = 'Uploading file...';
-                resultsTable.innerHTML = '';
+                reader.onload = async function(event) {
+                    const content = event.target.result;
+                    const encodedBlob = new Blob([content], { type: file.type || "text/csv" });
 
-                try {
-                    const response = await fetch('http://localhost:8000/process-file', {
-                        method: 'POST',
-                        body: formData
-                    });
+                    const formData = new FormData();
+                    formData.append('file', encodedBlob, file.name);
 
-                    if (!response.ok) {
-                        throw new Error('Upload failed');
-                    }
+                    button.disabled = true;
+                    loading.style.display = 'inline-block';
+                    progressInfo.style.display = 'block';
+                    progressInfo.textContent = 'Uploading file...';
+                    resultsTable.innerHTML = '';
 
-                    const data = await response.json();
-                    
-                    // Add legend first
-                    resultsTable.innerHTML = createLegend();
-                    
-                    // Create results table
-                    let tableHTML = `
-                        <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
-                            <thead>
-                                <tr>
-                                    <th style="border: 1px solid #ddd; padding: 8px; background-color: #f8f9fa;">Source Text</th>
-                                    <th style="border: 1px solid #ddd; padding: 8px; background-color: #f8f9fa;">Translated Text</th>
-                                    <th style="border: 1px solid #ddd; padding: 8px; background-color: #f8f9fa;">Similarity Score</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                    `;
+                    try {
+                        const response = await fetch(`${API_BASE_URL}/process-file`, {
+                            method: 'POST',
+                            body: formData
+                        });
 
-                    data.results.forEach(result => {
-                        const score = (result.similarity_score * 100).toFixed(2);
-                        const similarityClass = getSimilarityClass(parseFloat(score));
-                        tableHTML += `
-                            <tr class="results-row ${similarityClass}">
-                                <td style="border: 1px solid #ddd; padding: 8px;">${result.source_text}</td>
-                                <td style="border: 1px solid #ddd; padding: 8px;">${result.translated_text}</td>
-                                <td style="border: 1px solid #ddd; padding: 8px;">${score}%</td>
-                            </tr>
+                        if (!response.ok) {
+                            const errorData = await response.json().catch(() => null);
+                            throw new Error(
+                                errorData?.detail || 
+                                `Upload failed with status: ${response.status} ${response.statusText}`
+                            );
+                        }
+                        console.log("HELLOOOO");
+
+                        const data = await response.json();
+                        
+                        if (!data.results || !Array.isArray(data.results)) {
+                            throw new Error('Invalid response format from server');
+                        }
+                        
+                        // Add legend first
+                        resultsTable.innerHTML = createLegend();
+                        
+                        // Create results table
+                        let tableHTML = `
+                            <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+                                <thead>
+                                    <tr>
+                                        <th style="border: 1px solid #ddd; padding: 8px; background-color: #f8f9fa;">Source Text</th>
+                                        <th style="border: 1px solid #ddd; padding: 8px; background-color: #f8f9fa;">Translated Text</th>
+                                        <th style="border: 1px solid #ddd; padding: 8px; background-color: #f8f9fa;">Similarity Score</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
                         `;
-                    });
+                        console.log("Results Data:", data.results);
 
-                    tableHTML += '</tbody></table>';
-                    resultsTable.innerHTML += tableHTML;
+                        data.results.forEach(result => {
+                            const sourceText = result.sentence1;
+                            const translatedText = result.sentence2;
+                            const score = (result.score * 100).toFixed(2);
+                            const similarityClass = getSimilarityClass(parseFloat(score));
+                            
+                            tableHTML += `
+                                <tr class="results-row ${similarityClass}">
+                                    <td style="border: 1px solid #ddd; padding: 8px;">${sourceText}</td>
+                                    <td style="border: 1px solid #ddd; padding: 8px;">${translatedText}</td>
+                                    <td style="border: 1px solid #ddd; padding: 8px;">${score}%</td>
+                                </tr>
+                            `;
+                        });
 
-                    // Add summary statistics
-                    const summaryStats = calculateSummaryStats(data.results);
-                    progressInfo.innerHTML = `
-                        Processed ${data.results.length} pairs<br>
-                        Average similarity: ${summaryStats.average.toFixed(2)}%<br>
-                        Below 70%: ${summaryStats.belowThreshold} pairs
-                    `;
-                } catch (error) {
-                    progressInfo.textContent = 'Error processing file. Please try again.';
-                    console.error('Error:', error);
-                } finally {
-                    button.disabled = false;
-                    loading.style.display = 'none';
-                }
+                        tableHTML += '</tbody></table>';
+                        resultsTable.innerHTML += tableHTML;
+
+                        // Add summary statistics
+                        const summaryStats = calculateSummaryStats(data.results);
+                        progressInfo.innerHTML = `
+                            Processed ${data.results.length} pairs<br>
+                            Average similarity: ${summaryStats.average.toFixed(2)}%<br>
+                            Below 70%: ${summaryStats.belowThreshold} pairs
+                        `;
+                    } catch (error) {
+                        progressInfo.textContent = `Error: ${error.message}`;
+                        console.error('Error:', error);
+                    } finally {
+                        button.disabled = false;
+                        loading.style.display = 'none';
+                    }
+                };
+                
+                reader.readAsText(file);
             };
 
+            // Define checkSimilarity in the proper scope
             checkSimilarity = async function() {
                 const sentence1 = document.getElementById('sentence1').value.trim();
                 const sentence2 = document.getElementById('sentence2').value.trim();
@@ -320,19 +347,17 @@
                 const loading = document.getElementById('loading');
                 const result = document.getElementById('result');
 
-                // Validate inputs
                 if (!sentence1 || !sentence2) {
                     showResult('Please enter both sentences.', 'error');
                     return;
                 }
 
-                // Disable button and show loading
                 button.disabled = true;
                 loading.style.display = 'inline-block';
                 result.style.display = 'none';
 
                 try {
-                    const response = await fetch('http://localhost:8000/similarity', {
+                    const response = await fetch(`${API_BASE_URL}/similarity`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -344,7 +369,11 @@
                     });
 
                     if (!response.ok) {
-                        throw new Error('Network response was not ok');
+                        const errorData = await response.json().catch(() => null);
+                        throw new Error(
+                            errorData?.detail || 
+                            `Request failed with status: ${response.status} ${response.statusText}`
+                        );
                     }
 
                     const data = await response.json();
@@ -356,10 +385,9 @@
                         showResult(`Similarity Score: ${score}%`, 'error');
                     }
                 } catch (error) {
-                    showResult('Error calculating similarity. Please try again.', 'error');
+                    showResult(`Error: ${error.message}`, 'error');
                     console.error('Error:', error);
                 } finally {
-                    // Re-enable button and hide loading
                     button.disabled = false;
                     loading.style.display = 'none';
                 }

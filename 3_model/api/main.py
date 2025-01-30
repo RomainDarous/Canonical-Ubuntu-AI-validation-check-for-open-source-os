@@ -156,8 +156,17 @@ async def lifespan(app: FastAPI):
         # Initialize model
         device = "cuda" if torch.cuda.is_available() else "cpu"
         # Load the existing SentenceTransformer model
-        #model = SentenceTransformer("sentence-transformers/distiluse-base-multilingual-cased-v2", device=device)
+        """
         model = SentenceTransformer('RomainDarous/one_epoch_dot_product_mistranslation_model', device=device)
+        model = SentenceTransformer("sentence-transformers/distiluse-base-multilingual-cased-v2", device=device)
+        model = SentenceTransformer('RomainDarous/full_two_epochs_additive_mistranslation_model', device=device)
+        model = SentenceTransformer('RomainDarous/finetuned_additive_generalized_model', device=device)
+        model = SentenceTransformer('RomainDarous/finetuned_additive_generalized_model', device=device)
+        model = SentenceTransformer('RomainDarous/direct_two_epoch_additive_meaninit_mistranslation_model', device=device)
+        model = SentenceTransformer('RomainDarous/direct_one_epoch_additive_mistranslation_model', device=device)"""
+        #model = SentenceTransformer('RomainDarous/finetuned_original_model', device=device)
+        model = SentenceTransformer('RomainDarous/direct_four_epoch_additive_meaninit_mistranslation_model', device=device)
+
         model.eval()
         print(f"Model loaded successfully on {device}")
         
@@ -226,9 +235,11 @@ async def process_file(file: UploadFile):
     try:
         # Read the CSV file
         contents = await file.read()
-        print(type(contents), file)
-        df = pd.read_csv(io.BytesIO(contents), sep=',', encoding='utf-8')
-        print("reached that part", df)
+        
+        # Decode the contents into a string
+        decoded_content = contents.decode('utf-8', errors='replace')
+
+        df = pd.read_csv(io.StringIO(decoded_content), sep=',')
         df = cleaning(df.loc[:,:])
 
         col1=""
