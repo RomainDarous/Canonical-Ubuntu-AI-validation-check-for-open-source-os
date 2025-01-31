@@ -14,6 +14,39 @@ import traceback
 
 
 class Corruptor:
+    """A class that aims to incorporate hateful speech in healthy open source operating systems translations.
+        MERGED_DATASET (Path): Path to thedirectory gathering all the translations of operating systems. 
+        METADATA_FILE_02 (Path): Path to the metadata file.
+        CORRUPTED_FILES (str): Key for corrupted files in metadata.
+        ROW_NUMBER (str): Key for row numbers in metadata.
+        HATEFUL_DATASET (Path): Path to the hateful dataset directory.
+        PROCESSED_HATEFUL_DATASET (Path): Path to the processed hateful dataset directory.
+        HATE_COLUMN_NAME (str): Column name for hate speech sentences.
+        HATESET_METADATA (Path): Path to the hateset metadata file.
+        CLOSE_LANGUAGES (str): Key for closest languages in hateset metadata.
+        HATE_LAST_ID (str): Key for last checked ID per hate set in hateset metadata.
+        ACCEPTED_LANGUAGES (list): List of accepted languages.
+    Methods:
+        load_all_multilingual_datasets(): Loads all multilingual hate speech datasets.
+        load_all_monolingual_datasets(): Loads all monolingual hate speech datasets.
+        load_albanian_datasets(): Loads Albanian hate speech datasets.
+        load_arabic_datasets(): Loads Arabic hate speech datasets.
+        load_bengali_datasets(): Loads Bengali hate speech datasets.
+        load_chinese_datasets(): Loads Chinese hate speech datasets.
+        load_dutch_datasets(): Loads Dutch hate speech datasets.
+        load_english_datasets(): Loads English hate speech datasets.
+        load_german_datasets(): Loads German hate speech datasets.
+        load_hindi_datasets(): Loads Hindi hate speech datasets.
+        load_indonesian_datasets(): Loads Indonesian hate speech datasets.
+        load_italian_datasets(): Loads Italian hate speech datasets.
+        load_korean_datasets(): Loads Korean hate speech datasets.
+        load_latvian_datasets(): Loads Latvian hate speech datasets.
+        load_portuguese_datasets(): Loads Portuguese hate speech datasets.
+        load_russian_datasets(): Loads Russian hate speech datasets.
+        load_spanish_datasets(): Loads Spanish hate speech datasets.
+        load_ukrainian_datasets(): Loads Ukrainian hate speech datasets.
+        load_urdu_datasets(): Loads Urdu hate speech datasets.
+    """
 
     MERGED_DATASET = Path('./2_os_by_language/datasets')
     METADATA_FILE_02 = Path('./2_os_by_language/metadata_02.json')
@@ -21,8 +54,6 @@ class Corruptor:
     ROW_NUMBER = "raws_per_file"
     MERGED_DATASET = Path('./2_os_by_language/datasets')
     
-    #MERGED_DATASET = Path('./tmp/dataset')
-
     HATEFUL_DATASET = Path('./multilingual_hateful_sets/data')
     PROCESSED_HATEFUL_DATASET = Path('./multilingual_hateful_sets/processed_data')
     HATE_COLUMN_NAME = "sentence"
@@ -42,6 +73,9 @@ class Corruptor:
 
         
     def __init__(self) -> None:
+        """
+        Initializes the Corruptor class by loading metadata and initializing the hatespeech dataset.
+        """
         # Loading the metadata files
         try:
             with open(self.METADATA_FILE_02, 'r', encoding='utf-8') as f:
@@ -56,6 +90,17 @@ class Corruptor:
         self.mult_hate_speech = DatasetDict()
 
     def data_corruption(self) -> None :
+        """
+            Executes the data corruption process on files in the specified dataset directory.
+            This method performs the following steps:
+            1. Lists all files in the MERGED_DATASET directory.
+            2. Determines the maximum number of rows allowed per file from the metadata.
+            3. Iterates over each file in the directory and attempts to corrupt the data based on hate language sets.
+            4. Saves the corrupted data back to the file.
+            5. Updates the metadata with the list of corrupted files.
+            6. Handles and logs any exceptions that occur during the process.
+            7. Writes the updated metadata and hateset metadata to their respective files.
+        """
         print("START OF THE CORRUPTION PROCESS...")
         self.list_dir = os.listdir(self.MERGED_DATASET)
 
@@ -89,6 +134,25 @@ class Corruptor:
         return
 
     def corrupt(self, file: Path, hate_languages: list[str], max_row_number: int) -> DataFrame :
+        """
+        Corrupts the given dataset by introducing hate speech translations and incorrect translations.
+        
+        Parameters:
+        file (Path): The path to the dataset file to be corrupted.
+        hate_languages (list[str]): A list of languages to use for hate speech translations.
+        max_row_number (int): The maximum number of rows in the corrupted dataset.
+        Returns:
+        DataFrame: The corrupted dataset with additional rows and modified translations.
+        
+        The function performs the following steps:
+        1. Loads the dataset from the specified file.
+        2. Shuffles the dataset randomly.
+        3. Loads the hate speech dataset for the specified languages.
+        4. Introduces hate speech translations into the dataset to balance the number of labels.
+        5. Adds incorrect translations to further balance the dataset.
+        6. Returns the corrupted dataset as a DataFrame.
+        """
+
         print(f"Corrupting : {file}...")
         # Loading the dataset
         df = pd.read_csv(file, encoding='utf-8', delimiter='\t')
@@ -175,6 +239,7 @@ class Corruptor:
             steps += 1
         
         self.hateset_metadata[self.HATE_LAST_ID][hate_languages[curr_hate_language_idx]] = curr_hate_set_idx
+        
         # --------------------------------------------------------------------------------
         # The potential additional corrupted rows to add
         valid_indexes = [i for i in range(init_os_set_len) if i not in init_idx_corrupted]
@@ -270,11 +335,24 @@ class Corruptor:
     
     # ------------ METADATA FUNCTIONS ------------------- #
     def reset_corrupted_files(self) -> None :
+        """
+        Resets the list of corrupted files in the metadata and writes the updated metadata to the corresponding file.
+        This method clears the list of corrupted files stored in `self.metadata_02` and updates the metadata file
+        specified by `self.METADATA_FILE_02` with the new, empty list.
+        """
+
         self.metadata_02[self.CORRUPTED_FILES] = []
         with open(self.METADATA_FILE_02, "w", encoding='utf-8') as f :
             json.dump(self.metadata_02, f, indent=4)
     
     def reset_last_checked_id_per_hate_set(self) -> None :
+        """
+        Resets the last checked ID for each hate set to 0.
+        This method iterates through the `hateset_metadata` dictionary, specifically
+        the keys under `HATE_LAST_ID`, and sets their values to 0. It then writes the
+        updated `hateset_metadata` back to the file specified by `HATESET_METADATA`.
+        """
+    
         for key in self.hateset_metadata[self.HATE_LAST_ID].keys() :
             self.hateset_metadata[self.HATE_LAST_ID][key] = 0
         with open(self.HATESET_METADATA, 'w', encoding='utf-8') as f :
@@ -284,11 +362,15 @@ class Corruptor:
 
     # ----------- HELP FUNCTIONS ------------------------ #
     def load_collected_files(self) -> list :
-        """Gets all file paths of the dataset into a list
-
+        """         
+        Loads and returns a list of all files in the merged dataset directory.
+        This method traverses the directory specified by `self.MERGED_DATASET` and collects all files within it.
+        If a subdirectory is encountered, it collects all files within that subdirectory as well.
+        
         Returns:
-            list: The list of the files
-        """
+            list: A list of file paths within the merged dataset directory.
+        """ 
+
         top_list_dir = os.listdir(self.MERGED_DATASET)
         list_dir = []  # list
         for sub_folder in top_list_dir:

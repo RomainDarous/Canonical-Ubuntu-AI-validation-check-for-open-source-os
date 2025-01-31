@@ -188,14 +188,51 @@ class MultiHeadGeneralizedPooling(nn.Module):
 
     def get_sentence_embedding_dimension(self) -> int:
         return self.sentence_dim
-
+    
     def save(self, save_dir: str, **kwargs) -> None:
+        # Save configuration as before
         with open(os.path.join(save_dir, "config.json"), "w") as fOut:
             json.dump(self.get_config_dict(), fOut, indent=4)
-    
+        
+        # Save weights of the pooling layer (P, W1, W2)
+        pooling_weights = {
+            "P": [p.weight.data for p in self.P],
+            "W1": [w.weight.data for w in self.W1],
+            "W2": [w.weight.data for w in self.W2]
+        }
+        
+        # Save as separate files
+        torch.save(pooling_weights, os.path.join(save_dir, "multihead_pooling_weights.pt"))
+
+        
     @staticmethod
-    def load(load_dir: str, **kwargs) -> "MultiHeadGeneralizedPooling":
+    def load(load_dir: str, device: str = 'cpu', **kwargs) -> "MultiHeadGeneralizedPooling":
+        # Load configuration as before
         with open(os.path.join(load_dir, "config.json")) as fIn:
             config = json.load(fIn)
 
-        return MultiHeadGeneralizedPooling(**config)
+        # Load the model with configuration
+        model = MultiHeadGeneralizedPooling(**config)
+
+        # Load the weights for the pooling layer with device mapping
+        pooling_weights = torch.load(
+            os.path.join(load_dir, "multihead_pooling_weights.pt"),
+            map_location=torch.device(device)
+        )
+        
+        # Assign loaded weights to the pooling layers
+        if model.pooling_type == model.ADDITIVE:
+            for i in range(model.num_heads):
+                model.P[i].weight.data = pooling_weights["P"][i]
+                model.W1[i].weight.data = pooling_weights["W1"][i]
+                model.W2[i].weight.data = pooling_weights["W2"][i]
+        
+        elif model.pooling_type == model.DOT_PRODUCT:
+            for i in range(model.num_heads):
+                model.P_K[i].weight.data = pooling_weights["P_K"][i]
+                model.Q[i].weight.data = pooling_weights["Q"][i]
+        else:
+            raise ValueError(f"Unsupported pooling type: {model.pooling_type}")
+
+        return model
+

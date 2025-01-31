@@ -28,6 +28,8 @@ class Collector:
         UPDATED_FILES (str): Key for updated files in metadata.
         ARCH_VERSIONS (str): Key for archive versions in metadata.
         VALID_LANGUAGES (str): Key for the list of accepted languages for translations in metadata.
+        WEBLATE_STOP_PROJECT (str) : Key for the last file processed when collecting weblate projects
+        LAUNCHPAD_STOP_PROJECT (str) : Key for the last file processed when collecting Ubuntu files from Launchpad
         ALL_FILES (str): Key for the dictionary that maps every file name to its last updated time in metadata.
     """
 
@@ -148,9 +150,6 @@ class Collector:
             languages (dict): Dict of the languages dict for a given Weblate project.
             project (str): The slug name of the project being checked.
             path (Path): The path where the translation files should be downloaded.
-
-        Returns:
-            dict : Dictionary, keys : updates paths, values : languages to update.
         """
 
         response = None
@@ -279,7 +278,7 @@ class Collector:
         else : return {}
 
     def is_in_wanted_projects(self, project: dict, wanted_os: list) -> tuple :
-        """Checks whether or not the current project is part of the wanted projects.
+        """Checks whether or not the current project is part of the projects we want the translation from.
 
         Args:
             project (dict): The current project.
@@ -433,7 +432,6 @@ class Collector:
         code_path = path.with_name(f"{path.stem}-{code}.csv")
 
         # Update check
-        creat_date = datetime.now()
         empty = True
 
         for i, line in enumerate(po_content) :

@@ -16,7 +16,7 @@ import torch
 
 
 class Processor:
-    """A class used to collect translations from Weblate and Ubuntu Launchpad.
+    """A class used to process the translations from Weblate and Ubuntu Launchpad.
 
     Attributes:
         METADATA_FILE_01 (Path): Path to the metadata file of the collected raw os translations.
@@ -29,6 +29,10 @@ class Processor:
         MERGED_DATASET (Path): Path to the processed os translations dataset.
         LAST_MERGED_FILE (Path): Path to the last merged file to resume merging.
         LAST_CLEANED_FILE (Path): Path to the last cleaned file to resume cleaning.
+        ROW_NUMBER (str) : Key of the metadata file of the processed os translations to get the number of available translations per file.
+        
+        TRANSLATION_CHECK_FILE (Path) : Path to the file storing potential mistranslation in the training dataset.
+        LAST_CKED_FILE (Path) : Path to the last checked file when performing a preliminary translation check.
     """
 
 
@@ -37,8 +41,6 @@ class Processor:
     UPDATED_FILES = "updated_files"
     ARCH_VERSIONS = "archive_versions"
     VALID_LANGUAGES = "languages"
-    #COLLECTED_DATASET_FOLDER = Path('../1_data_collection/os_by_language/dataset')
-    #COLLECTED_DATASET_FOLDER = Path('./tmp/dataset/')
     
     MERGED_DATASET = Path('./2_os_by_language/datasets')
     METADATA_FILE_02 = Path('./2_os_by_language/metadata_02.json')
@@ -47,14 +49,14 @@ class Processor:
     LAST_CLEANED_FILE = Path('./2_os_by_language/last_cleaned_file.txt')
 
     COLLECTED_DATASET_FOLDER = MERGED_DATASET
-    #MERGED_DATASET = Path('./tmp/dataset/')
 
     # Translation check-up
     TRANSLATION_CHECK_FILE = Path('./2_os_by_language/02_translation_check.json')
     LAST_CHECKED_FILE = 'last_checked_file'
 
     def __init__(self) -> None:
-        """Initializes the Processor instance and loads the metadata of the collected raw os translation.
+        """
+        Initializes the Processor instance and loads the metadata of the collected raw os translation.
         """
         # Downloading nltk databases
         nltk.download('punkt')
@@ -75,11 +77,23 @@ class Processor:
             print("Error while loading the metadata file. Please try again.")
             sys.exit()
 
-    def data_cleaning(self, update_only: bool =False) -> None:
-        """Performs cleaning of the dataset.
-
+    def data_cleaning(self, update_only: bool = False) -> None:
+        """
+        Cleans the dataset by processing each file in the list of directories.
+        
         Args:
-            update_only (bool, optional): True if you want to clean only updated files from the dataset. Defaults to False.
+            update_only (bool): If True, only updates the files listed in the metadata. 
+                    If False, loads all collected files for cleaning.
+        
+        The cleaning process includes:
+            - Loading files from the specified directories.
+            - Reading each file with different delimiters until a valid DataFrame is obtained.
+            - Removing empty strings and dropping rows with NaN values.
+            - Applying a custom cleaning function to the DataFrame.
+            - Stacking small rows together.
+            - Saving the cleaned DataFrame back to the file with a 'score' column added.
+            - Deleting the resume file if the cleaning process completes successfully.
+            - Updating the metadata file with the latest changes.
         """
 
         print("STARTING THE CLEANING PROCESS...")
@@ -156,9 +170,16 @@ class Processor:
 
     
     def data_merging(self) -> None :
-        """ Merges all the files to build monolingual datasets
-
         """
+        Merges multiple data files into a single dataset per language and saves the merged datasets.
+        This method performs the following steps:
+        1. Loads the list of collected files to be merged.
+        2. Resumes from the last merged file if the process was previously interrupted.
+        3. Iterates through the list of files, reads each file, and merges them into a dictionary of DataFrames categorized by language code.
+        4. Handles different delimiters ('|', ',', '\t') to read the CSV files.
+        5. Saves the merged datasets to disk and updates metadata.
+        """
+
         print("STARTING THE MERGING PROCESS...")
         # Start of the fusion
         dataset_dict : Dict[str, pd.DataFrame] = {}
@@ -224,6 +245,14 @@ class Processor:
             return
         
     def preliminary_translation_quality_check(self) -> None :
+        """
+        Perform a preliminary translation quality check on the merged dataset.
+        This method uses the SentenceTransformer model to encode sentences and calculate 
+        the cosine similarity between pairs of sentences. If the similarity is below a 
+        specified threshold, the sentence pair is flagged as a potential mistranslation.
+        The method supports resuming from the last checked file in case of interruptions.
+        """
+        
         print("PRELIMINARY TRANSLATION QUALITY CHECK...")
 
         model = SentenceTransformer('sentence-transformers/distiluse-base-multilingual-cased-v2')
@@ -232,9 +261,8 @@ class Processor:
         threshold = 0.1
         resumed = True
 
-        """if not self.translation_check_metadata[self.LAST_CHECKED_FILE] : self.reset_translation_metadata()
-        else : resumed = False"""
-        resumed = False # TO CHANGE
+        if not self.translation_check_metadata[self.LAST_CHECKED_FILE] : self.reset_translation_metadata()
+        else : resumed = False
 
         try :
             # Checking in all files low similarity translations
@@ -274,6 +302,14 @@ class Processor:
         return
     
     def delete_wrong_translations(self) -> None :
+        """
+        Deletes incorrect translations from the dataset files and updates metadata.
+        This method iterates through the translation check metadata and deletes the rows
+        with incorrect translations from the corresponding dataset files, except for the
+        last checked file. It then updates the metadata with the new row counts for each
+        file and writes the updated metadata to a JSON file.
+        """
+        
         for file in self.translation_check_metadata.keys() :
             if file != self.LAST_CHECKED_FILE :
                 df = pd.read_csv(self.MERGED_DATASET / file, encoding='utf-8', delimiter='\t')
@@ -290,7 +326,12 @@ class Processor:
 
     @staticmethod
     def data_upload(data_dir: Path) -> None :
-        """Once the processing is done, pushes the dataset to HuggingFace
+        """
+        Pushes a dataset to HuggingFace, assuming connection with a peronal account
+        has already been performed.
+
+        Args:
+            data_dir (Path) : path of the dataset to push.
         """
         files = os.listdir(data_dir)
 
@@ -316,7 +357,17 @@ class Processor:
 
 
     # ----------------- HELP FUNCTIONS ------------------------------- #
-    def cosim(self, vec1, vec2) -> float :
+    def cosim(self, vec1, vec2) -> float:
+        """
+        Computes the cosine similarity between two vectors.
+
+        Args:
+            vec1 : First vector. Can be a list, tuple, NumPy ndarray, scalar, and other types.
+            vec2 : Second vector. Can be a list, tuple, NumPy ndarray, scalar, and other types.
+
+        Returns:
+            float: Cosine similarity between vec1 and vec2.
+        """
         vec1 = torch.tensor(vec1)
         vec2 = torch.tensor(vec2)
         dot_product = torch.dot(vec1, vec2)  # Efficient dot product
@@ -326,14 +377,21 @@ class Processor:
         return cosine_similarity.item()
 
     def row_stacking(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Gathers small rows together (less than three words)
-
-        Args:
-            df (pd.DataFrame): The dataframe to consider
-
-        Returns:
-            pd.DataFrame: The factorized dataset. Rows are alignes, separated by '. ' for each feature
         """
+        Stacks rows of a DataFrame based on specific conditions.
+        This method processes a DataFrame by iterating through its rows and 
+        concatenating certain rows based on the length of the text in the first 
+        column and the absence of specific characters ('?' and '!'). Rows that 
+        meet the criteria are removed from their original position and concatenated 
+        into a new row after every 5 rows.
+        
+        Parameters:
+        df (pd.DataFrame): The input DataFrame with at least two columns.
+        
+        Returns:
+        pd.DataFrame: The processed DataFrame with concatenated rows.
+        """
+        
         l = len(df)
 
         source_feature = []
@@ -343,6 +401,8 @@ class Processor:
         code1, code2 = df.columns[:2]
 
         for index, row in df.iterrows():
+
+            # Checking the length of the row
             if len(row[code1].split(' ')) <= 4 and '?' not in row[code1] and '!' not in row[code1] :
                 df = df.drop(index=index).loc[:, :]
                 l -= 1
@@ -350,6 +410,7 @@ class Processor:
                 target_feature.append(row[code2].replace('.',''))
                 row_nb += 1
 
+            # Concatenating rows when enough rows.
             if row_nb == 5 :
                 df.loc[l, [code1, code2]] = [('. '.join(source_feature)), ('. '.join(target_feature))]
                 source_feature = []
@@ -360,13 +421,27 @@ class Processor:
         return df
 
     def cleaning(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Performs cleaning of the dataset in input for training.
-
-        Args:
-            df (pd.Dataframe): the input dataframe to clean
-        Returns:
-            pd.DataFrame: a cleaned version of the input dataframe
         """
+        Cleans the input DataFrame by applying various text cleaning operations.
+        
+        Parameters:
+        df (pd.DataFrame): The input DataFrame to be cleaned.
+        
+        Returns:
+        pd.DataFrame: The cleaned DataFrame.
+        
+        Cleaning Steps:
+        1. Removes rows where non-English columns have the same content as the 'en' column.
+        2. Applies the following regex-based cleaning operations:
+            - Removes mentions, URLs, UTF characters, IPv4 and IPv6 addresses, and other unwanted patterns.
+            - Removes special characters and excessive spaces.
+        3. Removes HTML tags.
+        4. Removes duplicate rows.
+        5. If the 'en' column exists, filters rows where the 'en' column has more than 128 words.
+        6. If the 'en' column does not exist, replaces empty strings with NaN and drops rows with NaN values.
+        """
+     
+        
         type_clean = [
             r'@\w+',                                # Remove @"content "
             r'\n+|\t+|\\n+',
@@ -425,7 +500,7 @@ class Processor:
             return df
     
     def remove_html(self, sentence: str) -> str:
-        """Removes html content from the data.
+        """Removes html content from a string.
 
         Args:
             sentence (str): The string to process.
@@ -439,13 +514,15 @@ class Processor:
     
 
     def is_english(self, sentence: str) -> str:
-        """Checks that the english string is not only made of acronyms that have no translation
-
+        """
+        Determines if a given sentence is in English based on the presence of English words.
+        This method tokenizes the input sentence and checks each word against the WordNet lexical database.
+        If more than 33% of the words in the sentence are found in WordNet, the sentence is considered English.
+        
         Args:
-            sentence (str): the string to check
-
+            sentence (str): The sentence to be checked.
         Returns:
-            str: the original string if more than a third of words are english, an empty string otherwise
+            str: The original sentence if it is considered English, otherwise an empty string.
         """
         if not sentence : return ''
         words = nltk.word_tokenize(sentence)
@@ -456,13 +533,13 @@ class Processor:
         else : return ''
     
     def resume(self, resume_file: Path) -> int :
-        """Resume data concatenation or merging if interrupted
+        """Resume data concatenation or merging if interrupted.
 
         Args:
-            resume_file (Path): the last file that has to be checked
+            resume_file (Path): the last file that has to be checked.
 
         Returns:
-            int: the idx on the file list to process corresponding to the file
+            int: the idx on the file list to process corresponding to the file.
         """
         try :
             last_file = None
@@ -478,10 +555,10 @@ class Processor:
         except : return 0
 
     def load_collected_files(self) -> list :
-        """Gets all file paths of the dataset into a list
+        """Gets the list of file paths in the dataset directiry.
 
         Returns:
-            list: The list of the files
+            list: The list of the paths.
         """
         top_list_dir = os.listdir(self.COLLECTED_DATASET_FOLDER)
         list_dir = []  # list
@@ -495,13 +572,25 @@ class Processor:
 
     #---------------------------- METADA MANAGEMENT ---------------------------------#
     def empty_updated_files(self) -> None :
-        """Empties the list of updated files in the metadata and saves it to the metadata file."""
-
+        """
+        Clears the list of updated files in the metadata and writes the updated metadata to the metadata file.
+        This method sets the 'UPDATED_FILES' key in the 'metadata_01' dictionary to an empty list and then
+        writes the updated dictionary to the file specified by 'METADATA_FILE_01' in JSON format.
+        """
+        
         self.metadata_01[self.UPDATED_FILES] = []
         with open(self.METADATA_FILE_01, "w", encoding='utf-8') as f :
             json.dump(self.metadata_01, f, indent=4)
 
     def reset_translation_metadata(self) -> None :
+        """
+            Resets the translation metadata for the dataset.
+            This method performs the following actions:
+            1. Lists all directories in the MERGED_DATASET directory and assigns it to self.list_dir.
+            2. Initializes an empty list for each directory in self.list_dir in the translation_check_metadata dictionary.
+            3. Sets the LAST_CHECKED_FILE key in translation_check_metadata to an empty string.
+            4. Writes the updated translation_check_metadata to the TRANSLATION_CHECK_FILE in JSON format.
+        """
         self.list_dir = os.listdir(self.MERGED_DATASET)
         for key in self.list_dir :
             self.translation_check_metadata[key] = []

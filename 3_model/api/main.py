@@ -8,12 +8,15 @@ from typing import List
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from sentence_generalized_pooling import GeneralizedSentenceTransformerMaker, MultiHeadGeneralizedPooling
 import numpy as np
 import random
 import pandas as pd
 import io
 from fastapi import UploadFile, File
+from pandas import Series
 from bs4 import BeautifulSoup
+
 
 seed = 42
 torch.manual_seed(seed)
@@ -45,60 +48,60 @@ def remove_html(sentence: str) -> str:
     return sentence
 
 def cleaning(df: pd.DataFrame) -> pd.DataFrame:
-        """Performs cleaning of the dataset in input for training.
+    """Performs cleaning of the dataset in input for training.
 
-        Args:
-            df (pd.Dataframe): the input dataframe to clean
-        Returns:
-            pd.DataFrame: a cleaned version of the input dataframe
-        """
-        type_clean = [
-            r'@\w+',                                # Remove @"content "
-            r'\n+|\t+|\\n+',
-            r'http\S+|www\S+',                      # Remove URLs
-            r'\[UTF-[^\]]+\]',                      # Remove UTF characters
-            r'(\()*(%[^)]+)(\))*',                  # Remove (%s) characters
-            r'^-+|-',                               # Replace leading/trailing dashes
-            r'(?<!^)(?=[A-Z])(?![A-Z])',            # Split attached words
-            r'\b(?:\d{1,3}\.){3}\d{1,3}\b',         # IPv4
-            r'\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b|(?:[0-9a-fA-F]{1,4}:){1,7}:|(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|\b::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}\b', # IPv6
-            r'\b(?:\d+\.)+\d+\b',                    # Removing 4.6.5.3-like sequences
-        ]
+    Args:
+        df (pd.Dataframe): the input dataframe to clean
+    Returns:
+        pd.DataFrame: a cleaned version of the input dataframe
+    """
+    type_clean = [
+        r'@\w+',                                # Remove @"content "
+        r'\n+|\t+|\\n+',
+        r'http\S+|www\S+',                      # Remove URLs
+        r'\[UTF-[^\]]+\]',                      # Remove UTF characters
+        r'(\()*(%[^)]+)(\))*',                  # Remove (%s) characters
+        r'^-+|-',                               # Replace leading/trailing dashes
+        r'(?<!^)(?=[A-Z])(?![A-Z])',            # Split attached words
+        r'\b(?:\d{1,3}\.){3}\d{1,3}\b',         # IPv4
+        r'\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b|(?:[0-9a-fA-F]{1,4}:){1,7}:|(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|\b::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}\b', # IPv6
+        r'\b(?:\d+\.)+\d+\b',                    # Removing 4.6.5.3-like sequences
+    ]
 
-        char_clean = [
-            r'(\$)',                                    # Remove ($){} characters
-            r'\(\((\()*((\s)*)(\))* | (\()*((\s)*)(\))*\)\) | \s\(\s | \s\)\s | \((\()*((\s)*)(\))*\)',   # Remove ((())))) types of strings
-            r'\{\{(\{)*((\s)*)(\})* | (\{)*((\s)*)(\})*\}\} | \s\{\s | \s\}\s | \{(\{)*((\s)*)(\})*\}',   # Same for {
-            r'\[\[(\[)*((\s)*)(\])* | (\[)*((\s)*)(\])*\]\] | \s\[\s | \s\]\s | \[(\[)*((\s)*)(\])*\]',   # Same for {
-            r'\/(\/)*',                                 # Remove all /(/)*
-            r'(?<=\s)([^\w\s?!:;]+)(?=\s)|^([^\w\s?!:;]+)(?=\s)|(?<=\s)([^\w\s?!:;]+)$',  # Remove special characters
-            r'``*| \'(\')*|""*|””*|““*',                # Remove various quotation marks
-        ]
+    char_clean = [
+        r'(\$)',                                    # Remove ($){} characters
+        r'\(\((\()*((\s)*)(\))* | (\()*((\s)*)(\))*\)\) | \s\(\s | \s\)\s | \((\()*((\s)*)(\))*\)',   # Remove ((())))) types of strings
+        r'\{\{(\{)*((\s)*)(\})* | (\{)*((\s)*)(\})*\}\} | \s\{\s | \s\}\s | \{(\{)*((\s)*)(\})*\}',   # Same for {
+        r'\[\[(\[)*((\s)*)(\])* | (\[)*((\s)*)(\])*\]\] | \s\[\s | \s\]\s | \[(\[)*((\s)*)(\])*\]',   # Same for {
+        r'\/(\/)*',                                 # Remove all /(/)*
+        r'(?<=\s)([^\w\s?!:;]+)(?=\s)|^([^\w\s?!:;]+)(?=\s)|(?<=\s)([^\w\s?!:;]+)$',  # Remove special characters
+        r'``*| \'(\')*|""*|””*|““*',                # Remove various quotation marks
+    ]
 
-        for column in df.columns:         
-            # Cleaning all the columns
-            try : 
-                df.loc[:,column] = df.loc[:,column].apply(remove_html)
-                df.loc[:,column] = df.loc[:,column].str.replace('|'.join(type_clean), ' ', regex=True)
-                df.loc[:,column] = df.loc[:,column].str.replace('|'.join(char_clean), ' ', regex=True)
+    for column in df.columns:         
+        # Cleaning all the columns
+        try : 
+            df.loc[:,column] = df.loc[:,column].apply(remove_html)
+            df.loc[:,column] = df.loc[:,column].str.replace('|'.join(type_clean), ' ', regex=True)
+            df.loc[:,column] = df.loc[:,column].str.replace('|'.join(char_clean), ' ', regex=True)
 
-                # Removing excessive spaces
-                df.loc[:,column] = df.loc[:,column].str.replace(r'\t(\t)*', ' ', regex=True)
-                df.loc[:,column] = df.loc[:,column].str.replace(r'\s+', ' ', regex=True).str.strip()
-            except Exception as e :
-                print(f"Error on column {column} : {e}")
-                print(df.head())
-                continue
-        
-        # Removing duplicates
-        df = (df.drop_duplicates(inplace=False)).loc[:, :]
+            # Removing excessive spaces
+            df.loc[:,column] = df.loc[:,column].str.replace(r'\t(\t)*', ' ', regex=True)
+            df.loc[:,column] = df.loc[:,column].str.replace(r'\s+', ' ', regex=True).str.strip()
+        except Exception as e :
+            print(f"Error on column {column} : {e}")
+            print(df.head())
+            continue
+    
+    # Removing duplicates
+    df = (df.drop_duplicates(inplace=False)).loc[:, :]
 
-        if 'en' in df.columns :
-            return df[df['en'].str.split(' ').str.len() <= 128]
-        else :
-            df.replace('', np.nan, inplace=True)
-            df.dropna(inplace=True)
-            return df
+    if 'en' in df.columns :
+        return df[df['en'].str.split(' ').str.len() <= 128]
+    else :
+        df.replace('', np.nan, inplace=True)
+        df.dropna(inplace=True)
+        return df
 
 # Pydantic model for request validation
 class SimilarityRequest(BaseModel):
@@ -130,6 +133,26 @@ async def worker():
         finally:
             fifo_queue.task_done()
 
+async def calculate_similarities(sentences_1, sentences_2) :
+    """
+    Calculate the cosine similarity between two sentences using the loaded model.
+    """
+    if model is None:
+        raise RuntimeError("Model not initialized")
+    
+    try:
+        scores = []
+        # Encode the sentences      
+        with torch.no_grad() :
+            vec1 = model.encode(list(sentences_1))
+            vec2 = model.encode(list(sentences_2))
+        for i in range(len(sentences_1)) :
+            scores.append(cosim(vec1[i], vec2[i]))
+        return scores
+    
+    except Exception as e:
+        raise RuntimeError(f"Error calculating similarity: {str(e)}")
+
 async def calculate_similarity(sentence1: str, sentence2: str) -> float:
     """
     Calculate the cosine similarity between two sentences using the loaded model.
@@ -139,8 +162,9 @@ async def calculate_similarity(sentence1: str, sentence2: str) -> float:
     
     try:
         # Encode the sentences      
-        vec1 = model.encode(sentence1)
-        vec2 = model.encode(sentence2)
+        with torch.no_grad() :
+            vec1 = model.encode(sentence1)
+            vec2 = model.encode(sentence2)
         return cosim(vec1, vec2)
     
     except Exception as e:
@@ -156,17 +180,7 @@ async def lifespan(app: FastAPI):
         # Initialize model
         device = "cuda" if torch.cuda.is_available() else "cpu"
         # Load the existing SentenceTransformer model
-        """
-        model = SentenceTransformer('RomainDarous/one_epoch_dot_product_mistranslation_model', device=device)
-        model = SentenceTransformer("sentence-transformers/distiluse-base-multilingual-cased-v2", device=device)
-        model = SentenceTransformer('RomainDarous/full_two_epochs_additive_mistranslation_model', device=device)
-        model = SentenceTransformer('RomainDarous/finetuned_additive_generalized_model', device=device)
-        model = SentenceTransformer('RomainDarous/finetuned_additive_generalized_model', device=device)
-        model = SentenceTransformer('RomainDarous/direct_two_epoch_additive_meaninit_mistranslation_model', device=device)
-        model = SentenceTransformer('RomainDarous/direct_one_epoch_additive_mistranslation_model', device=device)"""
-        #model = SentenceTransformer('RomainDarous/finetuned_original_model', device=device)
-        model = SentenceTransformer('RomainDarous/direct_four_epoch_additive_meaninit_mistranslation_model', device=device)
-
+        model = SentenceTransformer('RomainDarous/directOneEpoch_additivePooling_randomInit_mistranslationModel', device=device)
         model.eval()
         print(f"Model loaded successfully on {device}")
         
@@ -240,31 +254,28 @@ async def process_file(file: UploadFile):
         decoded_content = contents.decode('utf-8', errors='replace')
 
         df = pd.read_csv(io.StringIO(decoded_content), sep=',')
-        df = cleaning(df.loc[:,:])
-
-        col1=""
-        col2=""
+        df = cleaning(df.copy())
 
         # Validate columns
-        if not len(list(df.columns)) == 2:
+        if not len(list(df.columns)) >= 2:
             raise HTTPException(
                 status_code=400, 
                 detail="CSV must contain two columns"
             )
-        else :
-            col1 = df.columns[0]
-            col2 = df.columns[1]
+
+        col1 = df.columns[0]
+        col2 = df.columns[1]
         
         results = []
-        
+
+        scores = await calculate_similarities(df[col1], df[col2])
+
         # Process each row
-        for _, row in df.iterrows():
-            score = await calculate_similarity(row[col1], row[col2])
-            results.append({
-                'sentence1': row[col1],
-                'sentence2': row[col2],
+        results = [{
+                'sentence1': df.loc[i, col1],
+                'sentence2': df.loc[i, col2],
                 'score': score
-            })
+            } for i,score in enumerate(scores)]
         
         return {"results": results}
     
