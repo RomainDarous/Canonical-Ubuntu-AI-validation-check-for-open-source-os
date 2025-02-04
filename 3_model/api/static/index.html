@@ -10,22 +10,19 @@
             max-width: 800px;
             margin: 0 auto;
             padding: 20px;
-        background-color: #f5f5f5;
+            background-color: #f5f5f5;
         }
 
-        .page { display: none; }
-        .active { display: block; }
+        h1 {
+            justify-content: center;
+        }
 
-        .container {
-            background-color: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        nav {
+            margin-top: 20px; 
+            display: flex; 
+            justify-content: center;
         }
-        .input-group {
-            margin-bottom: 15px;
-            width: 100%;
-        }
+
         label {
             display: block;
             margin-bottom: 5px;
@@ -38,28 +35,45 @@
             border-radius: 4px;
             font-size: 16px;
         }
+
         button {
-            background-color: #007bff;
+            background-color: #196B24;
             color: white;
             padding: 10px 20px;
             border: none;
             border-radius: 4px;
             cursor: pointer;
             font-size: 16px;
+            margin-right : 15px ;
+            margin-left : 15px ;
         }
         button:hover {
-            background-color: #0056b3;
+            background-color: #114518;
         }
         button:disabled {
             background-color: #cccccc;
             cursor: not-allowed;
         }
-        #result {
-            margin-top: 20px;
-            padding: 15px;
-            border-radius: 4px;
-            display: none;
+
+        .page { display: none; }
+        .active { display: block; }
+
+
+        .result {
+            margin-bottom: 10px;
         }
+
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .input-group {
+            margin-bottom: 15px;
+            width: 100%;
+        }
+
         .loading {
             display: inline-block;
             margin-left: 10px;
@@ -77,51 +91,89 @@
             width: 100%;
         }
 
-            /* Similarity score color classes */
-    .similarity-90-100 {
-        background-color: #1a9850;
-        color: white;
-    }
-    .similarity-80-90 {
-        background-color: #91cf60;
-        color: black;
-    }
-    .similarity-70-80 {
-        background-color: #fee08b;
-        color: black;
-    }
-    .similarity-60-70 {
-        background-color: #fcaa59;
-        color: black;
-    }
-    .similarity-50-60 {
-        background-color: #fc8d59;
-        color: black;
-    }
-    .similarity-0-50 {
-        background-color: #d73027;
-        color: white;
-    }
+        /* Similarity score color classes */
+        .similarity-90-100 {
+            background-color: #1a9850;
+            color: white;
+        }
+        .similarity-80-90 {
+            background-color: #91cf60;
+            color: black;
+        }
+        .similarity-70-80 {
+            background-color: #fee08b;
+            color: black;
+        }
+        .similarity-60-70 {
+            background-color: #fcaa59;
+            color: black;
+        }
+        .similarity-50-60 {
+            background-color: #fc8d59;
+            color: black;
+        }
+        .similarity-0-50 {
+            background-color: #d73027;
+            color: white;
+        }
 
-    /* Add hover effect to show exact score */
-    .results-row:hover {
-        filter: brightness(0.95);
-    }
+        /* Add hover effect to show exact score */
+        .results-row:hover {
+            filter: brightness(0.95);
+        }
 
-    /* Style for the legend */
-    .similarity-legend {
-        margin-top: 20px;
-        padding: 10px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-    }
+        /* Style for the legend */
+        .similarity-legend-full {
+            border-top: 1px solid #bbbbbb;
+        }
 
-    .legend-item {
-        display: inline-block;
-        padding: 2px 8px;
-        margin: 2px;
-        border-radius: 3px;
-    }
+        .similarity-legend {
+            display: grid;                
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;                       
+            margin: 0px 15px 10px 10px;
+        }
+
+        .legend-item {
+            display: inline-block;
+            padding: 10px 8px;
+            margin: 2px;
+            border-radius: 3px;
+        }
+        input[type="file"] {
+            display : none;
+        }
+
+        #result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            display: none;
+        }
+
+        #import-file {
+            font-weight: normal;
+            background-color: #bc4512;
+            color: white;
+            padding: 10px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right : 42% ;
+            margin-left : 42% ;
+            text-align: center;
+        }
+        #import-file:hover {
+            background-color: #562709;
+        }
+
+        #result-table {
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-top: 40px;
+        }
+
     </style>
 </head>
 <body>
@@ -137,12 +189,10 @@
     <div id="single_request" class="container page">
         <h1>Mistranslation detector</h1>
         <div class="input-group">
-            <label for="sentence1">First Sentence:</label>
             <input type="text" id="sentence1" placeholder="Enter the first sentence", class = "large-input">
         </div>
 
         <div class="input-group">
-            <label for="sentence2">Second Sentence:</label>
             <input type="text" id="sentence2" placeholder="Enter the second sentence", class = "large-input">
         </div>
 
@@ -157,27 +207,27 @@
     </div>
 
     <div id="file_request" class="container page">
-        <h1>Import a file</h1>
-        <p>Upload a CSV file containing pairs of sentences to check for mistranslations.</p>
+        <h1>Mistranslation detector</h1>
+        <p>Upload a CSV file containing pairs of sentences to check for mistranslations. Two columns required.</p>
         
-        <div class="input-group">
-            <label for="csvFile">Select CSV file:</label>
-            <input type="file" id="csvFile" accept=".csv" class="large-input">
+        <div id="large-input">
+            <label for="csvFile" id="import-file" onclick="showFile()">Import File</label>
+            <input type="file" id="csvFile" accept=".csv">
         </div>
     
-        <p class="help-text">The CSV should have two columns</p>
-    
-        <span id="file-loading" class="loading" style="display: none;">Processing file...</span>
-        
-        <div id="file-result" style="margin-top: 20px;">
-            <div id="progress-info" style="display: none;"></div>
-            <div id="results-table" style="margin-top: 15px;"></div>
-        </div>
-    
+        <p id="file-name"></p>
+            
         <nav>
             <button id="uploadButton" onclick="fileUpload()">Process File</button>
             <button onclick="showPage('single_request')">Single Request</button>
+            <button id="downloadButton" onclick="downloadResults()" style="display: none;">Download</button>
         </nav>
+
+        <div id="file-result" style="margin-top: 20px;">
+            <div id="results-table" style="margin-top: 15px;"></div>
+        </div>
+    
+
     </div>
     <script>
         // Define functions in global scope
@@ -212,35 +262,40 @@
 
             function createLegend() {
                 return `
-                    <div class="similarity-legend">
-                        <h4>Similarity Score Legend:</h4>
-                        <div class="legend-item similarity-90-100">90-100% (Excellent)</div>
-                        <div class="legend-item similarity-80-90">80-89% (Very Good)</div>
-                        <div class="legend-item similarity-70-80">70-79% (Good)</div>
-                        <div class="legend-item similarity-60-70">60-69% (Fair)</div>
-                        <div class="legend-item similarity-50-60">50-59% (Poor)</div>
-                        <div class="legend-item similarity-0-50">&lt;50% (Very Poor)</div>
+                    <div class="similarity-legend-full">
+                        <h3>Similarity Score Legend</h3>
+                        <div class="similarity-legend">
+                            <div class="legend-item similarity-90-100">90-100% (Excellent)</div>
+                            <div class="legend-item similarity-80-90">80-89% (Very Good)</div>
+                            <div class="legend-item similarity-70-80">70-79% (Good)</div>
+                            <div class="legend-item similarity-60-70">60-69% (Fair)</div>
+                            <div class="legend-item similarity-50-60">50-59% (Poor)</div>
+                            <div class="legend-item similarity-0-50">&lt;50% (Very Poor)</div>
+                        </div>
                     </div>
                 `;
             }
+            
+            showFile = function () {
+                const fileName = document.getElementById('file-name');
+                const fileInput = document.getElementById('csvFile');
 
-            function calculateSummaryStats(results) {
-                const scores = results.map(r => r.similarity_score * 100);
-                const average = scores.reduce((a, b) => a + b, 0) / scores.length;
-                const belowThreshold = scores.filter(score => score < 70).length;
-                
-                return {
-                    average,
-                    belowThreshold
-                };
-            }
+                if (fileInput.files.length > 0) {
+                    const file = fileInput.files[0];
+                    fileName.textContent = 'Loaded file : ' + file.name;  // Display the file name
+                } else {
+                    fileName.textContent = '';  // In case no file is selected
+                }
+            };
+
+            // Add an event listener to the input element to run showFile when the file is selected
+            document.getElementById('csvFile').addEventListener('change', showFile);
 
             // Define fileUpload in the proper scope
             fileUpload = async function() {
+                const fileName = document.getElementById('file-name');
                 const fileInput = document.getElementById('csvFile');
                 const button = document.getElementById('uploadButton');
-                const loading = document.getElementById('file-loading');
-                const progressInfo = document.getElementById('progress-info');
                 const resultsTable = document.getElementById('results-table');
 
                 if (!fileInput.files.length) {
@@ -259,10 +314,9 @@
                     formData.append('file', encodedBlob, file.name);
 
                     button.disabled = true;
-                    loading.style.display = 'inline-block';
-                    progressInfo.style.display = 'block';
-                    progressInfo.textContent = 'Uploading file...';
+                    button.innerHTML = 'Processing...';
                     resultsTable.innerHTML = '';
+
 
                     try {
                         const response = await fetch(`${API_BASE_URL}/process-file`, {
@@ -277,7 +331,9 @@
                                 `Upload failed with status: ${response.status} ${response.statusText}`
                             );
                         }
-                        console.log("HELLOOOO");
+
+                        button.innerHTML = 'Process File';
+                        document.getElementById('downloadButton').style.display = 'inline-block';
 
                         const data = await response.json();
                         
@@ -290,12 +346,12 @@
                         
                         // Create results table
                         let tableHTML = `
-                            <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+                            <table id="result-table">
                                 <thead>
                                     <tr>
-                                        <th style="border: 1px solid #ddd; padding: 8px; background-color: #f8f9fa;">Source Text</th>
-                                        <th style="border: 1px solid #ddd; padding: 8px; background-color: #f8f9fa;">Translated Text</th>
-                                        <th style="border: 1px solid #ddd; padding: 8px; background-color: #f8f9fa;">Similarity Score</th>
+                                        <th style="border: 0px 0px 1px 1px solid #ddd; padding: 8px; background-color: #f8f9fa;">Source Text</th>
+                                        <th style="border: 0px 0px 1px 1px solid #ddd; padding: 8px; background-color: #f8f9fa;">Translated Text</th>
+                                        <th style="border: 0px 0px 1px 1px solid #ddd; padding: 8px; background-color: #f8f9fa;">Similarity Score</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -310,9 +366,9 @@
                             
                             tableHTML += `
                                 <tr class="results-row ${similarityClass}">
-                                    <td style="border: 1px solid #ddd; padding: 8px;">${sourceText}</td>
-                                    <td style="border: 1px solid #ddd; padding: 8px;">${translatedText}</td>
-                                    <td style="border: 1px solid #ddd; padding: 8px;">${score}%</td>
+                                    <td style="border: 0px 0px 1px 1px solid #ddd; padding: 8px;">${sourceText}</td>
+                                    <td style="border: 0px 0px 1px 1px solid #ddd; padding: 8px;">${translatedText}</td>
+                                    <td style="border: 0px 0px 1px 1px solid #ddd; padding: 8px;">${score}%</td>
                                 </tr>
                             `;
                         });
@@ -322,13 +378,8 @@
 
                         // Add summary statistics
                         const summaryStats = calculateSummaryStats(data.results);
-                        progressInfo.innerHTML = `
-                            Processed ${data.results.length} pairs<br>
-                            Average similarity: ${summaryStats.average.toFixed(2)}%<br>
-                            Below 70%: ${summaryStats.belowThreshold} pairs
-                        `;
+
                     } catch (error) {
-                        progressInfo.textContent = `Error: ${error.message}`;
                         console.error('Error:', error);
                     } finally {
                         button.disabled = false;
@@ -393,6 +444,35 @@
                 }
             };
         });
+
+        downloadResults = function () {
+            const table = document.getElementById('results-table');
+            let csvContent = "data:text/csv;charset=utf-8,";
+            
+            // Add headers
+            csvContent += "Original Text,Translated Text,Similarity Score\n";
+            
+            // Get all rows except header
+            const rows = table.getElementsByTagName('tr');
+            for(let i = 1; i < rows.length; i++) {
+                const cells = rows[i].getElementsByTagName('td');
+                const row = [
+                    `"${cells[0].textContent}"`,
+                    `"${cells[1].textContent}"`,
+                    cells[2].textContent.replace('%', '')
+                ];
+                csvContent += row.join(',') + "\n";
+            }
+            
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "translation_results.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+
     </script>
 </body>
 </html>

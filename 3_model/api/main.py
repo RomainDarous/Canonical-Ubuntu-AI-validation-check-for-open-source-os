@@ -4,10 +4,10 @@ from pydantic import BaseModel
 import torch
 from sentence_transformers import SentenceTransformer
 from contextlib import asynccontextmanager
-from typing import List
+from typing import List, Optional
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sentence_generalized_pooling import GeneralizedSentenceTransformerMaker, MultiHeadGeneralizedPooling
 import numpy as np
 import random
@@ -16,6 +16,8 @@ import io
 from fastapi import UploadFile, File
 from pandas import Series
 from bs4 import BeautifulSoup
+import csv
+from datetime import datetime
 
 
 seed = 42
@@ -120,6 +122,8 @@ class FileProcessingResponse(BaseModel):
 model = None
 workers = []
 fifo_queue = asyncio.Queue()
+processed_results = {}  # Store processed results temporarily
+
 
 async def worker():
     while True:
@@ -254,7 +258,7 @@ async def process_file(file: UploadFile):
         decoded_content = contents.decode('utf-8', errors='replace')
 
         df = pd.read_csv(io.StringIO(decoded_content), sep=',')
-        df = cleaning(df.copy())
+        df_cleaned = cleaning(df.copy())
 
         # Validate columns
         if not len(list(df.columns)) >= 2:
@@ -263,12 +267,12 @@ async def process_file(file: UploadFile):
                 detail="CSV must contain two columns"
             )
 
-        col1 = df.columns[0]
-        col2 = df.columns[1]
+        col1 = df_cleaned.columns[0]
+        col2 = df_cleaned.columns[1]
         
         results = []
 
-        scores = await calculate_similarities(df[col1], df[col2])
+        scores = await calculate_similarities(df_cleaned[col1], df_cleaned[col2])
 
         # Process each row
         results = [{
@@ -281,3 +285,41 @@ async def process_file(file: UploadFile):
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/download/{file_id}")
+async def download_results(file_id: str):
+    if file_id not in processed_results:
+        raise HTTPException(status_code=404, detail="Results not found")
+    
+    try:
+        results = processed_results[file_id]
+        
+        # Create CSV in memory
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Write headers
+        writer.writerow(['Original Text', 'Translated Text', 'Similarity Score'])
+        
+        # Write data
+        for result in results:
+            writer.writerow([
+                result['sentence1'],
+                result['sentence2'],
+                f"{result['score']:.2%}"
+            ])
+        
+        # Prepare response
+        output.seek(0)
+        
+        return StreamingResponse(
+            io.StringIO(output.getvalue()),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f"attachment; filename=translation_results_{file_id}.csv"
+            }
+        )
+    
+    except Exception as e:
+        processed_results.pop(file_id, None)  # Cleanup in case of error
+        raise HTTPException(status_code=500, detail=f"Error generating CSV: {str(e)}")
