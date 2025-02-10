@@ -4,7 +4,7 @@ from pydantic import BaseModel
 import torch
 from sentence_transformers import SentenceTransformer
 from contextlib import asynccontextmanager
-from typing import List, Optional
+from typing import List
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
@@ -14,10 +14,8 @@ import random
 import pandas as pd
 import io
 from fastapi import UploadFile, File
-from pandas import Series
 from bs4 import BeautifulSoup
 import csv
-from datetime import datetime
 
 
 seed = 42
@@ -184,7 +182,8 @@ async def lifespan(app: FastAPI):
         # Initialize model
         device = "cuda" if torch.cuda.is_available() else "cpu"
         # Load the existing SentenceTransformer model
-        model = SentenceTransformer('RomainDarous/directOneEpoch_additivePooling_randomInit_mistranslationModel', device=device)
+        model = SentenceTransformer('RomainDarous/directTwoEpoch_additivePooling_noisedInit_mistranslationModel', device=device)
+        #model = SentenceTransformer('RomainDarous/pretrainedfinetuned_fourepochs_meanpooling_mistranslationmodel', device=device)
         model.eval()
         print(f"Model loaded successfully on {device}")
         
@@ -192,7 +191,6 @@ async def lifespan(app: FastAPI):
         num_workers = 3  # Adjust based on your needs
         workers = [asyncio.create_task(worker()) for _ in range(num_workers)]
         print(f"Created {num_workers} worker tasks")
-        
         yield
         
     finally:

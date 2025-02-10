@@ -1,0 +1,7 @@
+fastapi==0.115.8
+uvicorn==0.34.0
+sentence-transformers==3.4.1
+sentence-generalized-pooling==0.3.0
+pandas==2.2.3
+bs4==0.0.2
+python_multipart==0.0.20
